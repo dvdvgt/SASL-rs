@@ -1,0 +1,25 @@
+def quicksort xs = 
+    if xs = nil then []
+    else concat (concat lhs [pivot]) rhs
+        where
+            pivot = hd xs;
+            leqPivot y = pivot >= y;
+            gtPivot y = pivot < y;
+            lhs = quicksort (filter leqPivot (tl xs));
+            rhs = quicksort (filter gtPivot (tl xs))
+def filter p l = 
+    if l=nil then nil
+    else 
+        (if p x then x:rest
+        else rest) 
+            where 
+                x  = hd l;
+                xs = tl l;
+                rest = filter p xs
+def concat xs ys = 
+    if xs = nil then ys
+    else
+        (if ys = nil then xs
+        else (hd xs) : concat (tl xs) (ys))
+.
+quicksort [3,1,4,1,5,9,7]

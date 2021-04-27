@@ -1,0 +1,30 @@
+def sieve = go (tl naturalNumbers)
+    where
+        go xs = (hd xs) : (go (filter (notDivableBy (hd xs)) xs))
+        
+def naturalNumbers = next 0
+    where 
+        next x = (x + 1) : (next (x + 1))
+
+def filter p l = 
+    if l = nil then nil
+    else 
+        (if p x then x:rest
+        else rest) 
+            where 
+                x  = hd l;
+                xs = tl l;
+                rest = filter p xs
+
+def take n xs = 
+    if n = 0 then nil 
+    else x : take (n - 1) ys
+    where 
+        ys = tl xs;
+        x = hd xs
+
+def mod x y = x - (y * z) where z = x / y
+def flip f x y = f y x
+def notDivableBy x y = (flip mod x y) ~= 0
+.
+take 5 sieve
