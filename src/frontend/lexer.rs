@@ -66,8 +66,14 @@ impl<'a> Lexer<'a> {
             Some(_) => self.new_token(Type::Geq),
             _ => self.new_token(Type::Greater)
         }
-        Some('+') => self.new_token(Type::Plus),
-        Some('-') => self.new_token(Type::Minus),
+        Some('+') => match self.advance_if(&' '){
+            Some(_) => self.new_token(Type::Plus),
+            _ => self.number()
+            }
+        Some('-') => match self.advance_if(&' '){
+            Some(_) => self.new_token(Type::Minus),
+            _ => self.number()
+            }
         Some('*') => self.new_token(Type::Mult),
         Some('/') => match self.advance_if(&'/') {
             Some(_) => {
