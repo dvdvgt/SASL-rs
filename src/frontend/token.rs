@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::fmt;
 use phf::{phf_map};
 
 use super::utils::Position;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token<'a> {
     pub typ: Type,
     pos: Position,
@@ -23,9 +23,21 @@ impl<'a> Token<'a> {
         }
     }
 
+    pub fn get_keyword(key: &str) -> Option<Type> {
+        match KEYWORDS.get(key) {
+            Some(tok) => Some(tok.clone()),
+            _ => None
+        }
+    }
 }
 
-#[derive(Debug, PartialEq)]
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{:?}: {} @ {}>", self.typ, self.lexeme, self.pos)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     // Literals
     Number(f64),
@@ -45,12 +57,23 @@ pub enum Type {
 
     Identifier,
 
-    Dot, LeftParenthese, RightParenthese, LeftBrackets, RightBrackets,
+    Dot, LeftParenthese, RightParenthese, LeftBrackets, RightBrackets, Comma, Colon, Semicolon,
 
     Whitespace
 }
 
 static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
-    "hd" => Type::Head
-    // ...
+    "hd" => Type::Head,
+    "tl" => Type::Tail,
+    "nil" => Type::Nil,
+    "def" => Type::Def,
+    "where" => Type::Where,
+    "if" => Type::If,
+    "then" => Type::Then,
+    "else" => Type::Else,
+    "or" => Type::Or,
+    "and" => Type::And,
+    "not" => Type::Not,
+    "true" => Type::Boolean(true),
+    "false" => Type::Boolean(false)
 };

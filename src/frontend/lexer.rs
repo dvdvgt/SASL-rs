@@ -1,4 +1,4 @@
-//! Token
+//! The lexer struct is responsible for tokenizing the source code so that it can be used by the parser to create the AST.
 
 use std::{collections::VecDeque, error::Error, iter::Peekable, str::Chars};
 
@@ -14,7 +14,7 @@ pub struct Lexer<'a> {
     current_idx: usize
 }
 
-type LexerResult<'a> = Result<Token<'a>, Box<Error>>;
+type LexerResult<'a> = Result<Token<'a>, Box<dyn Error>>;
 
 impl<'a> Lexer<'a> {
     // Create a new instance of `Lexer`
@@ -30,7 +30,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Tokenize source string.
-    pub fn tokenize(&mut self) -> Result<&VecDeque<Token<'a>>, Box<Error>> {
+    pub fn tokenize(&mut self) -> Result<&VecDeque<Token<'a>>, Box<dyn Error>> {
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
             let token = self.next_token()?;
@@ -50,7 +50,9 @@ impl<'a> Lexer<'a> {
         Some('[') => self.new_token(Type::LeftBrackets),
         Some(']') => self.new_token(Type::RightBrackets),
         Some('.') => self.new_token(Type::Dot),
-
+        Some(',') => self.new_token(Type::Comma),
+        Some(':') => self.new_token(Type::Colon),
+        Some(';') => self.new_token(Type::Semicolon),
         Some('=') => self.new_token(Type::Equal),
         Some('~') if self.chars.peek() == Some(&'=') => {
             self.advance();
@@ -75,10 +77,23 @@ impl<'a> Lexer<'a> {
             _ => self.new_token(Type::Div)
         }
 
-        Some(' ') | Some('\t') => self.new_token(Type::Whitespace),
-        // Literals
-        Some(c) => self.number(),
-        _ => todo!()
+        Some(' ') | Some('\t') | Some('\r') => self.new_token(Type::Whitespace), // Whitespaces will be discarded
+        Some('\n') => {
+            self.token_pos.next_line();
+            self.new_token(Type::Whitespace)
+        },
+        Some('\"') => self.string(),
+        // Literals, keywords
+        Some(c) => {
+            if c.is_digit(10) {
+                self.number()
+            } else if c.is_alphabetic() {
+                self.keyword()
+            } else {
+                Err(Box::new(SyntaxError::new(self.token_pos, "unkown keyword/identifier.".to_string())))
+            }
+        }
+        _ => Err(Box::new(SyntaxError::new(self.token_pos, "unkown input.".to_string())))
         }
     }
 
@@ -86,6 +101,12 @@ impl<'a> Lexer<'a> {
     // HELPER
     //-------
 
+    /// Extracts a substring from the source string starting at `start_index` and ending at `current_index`.
+    fn get_substr_from_current_range(&self) -> &'a str {
+        &self.source[self.start_idx .. self.current_idx]
+    }
+
+    /// Convenience function for creating new `Token`s easily.
     fn new_token(&self, typ: Type) -> LexerResult<'a> {
         Ok(Token::new_non_literal(typ, self.token_pos, self.source, self.start_idx..self.current_idx))
     }
@@ -98,6 +119,7 @@ impl<'a> Lexer<'a> {
         self.chars.next()
     }
 
+    /// Only advance the iterator if the next character is the expected one.
     fn advance_if(&mut self, expected: &char) -> Option<char> {
         match self.chars.peek() {
             Some(c) if c == expected => self.advance(),
@@ -109,7 +131,7 @@ impl<'a> Lexer<'a> {
     /// 
     /// ## Example
     /// advance_while(&mut self, &|c| c.is_alphabetic());
-    fn advance_while(&mut self, predicate: &Fn(&char) -> bool) {
+    fn advance_while(&mut self, predicate: &dyn Fn(&char) -> bool) {
         loop {
             match self.chars.peek() {
                 Some(c) if !predicate(c) => break,
@@ -133,6 +155,7 @@ impl<'a> Lexer<'a> {
     // Literals
     //---------
 
+    /// Tokenize a number literal.
     fn number(&mut self) -> LexerResult<'a> {
         self.advance_while(&|c| c.is_digit(10));
         if self.chars.peek() == Some(&'.') {
@@ -143,7 +166,40 @@ impl<'a> Lexer<'a> {
             self.advance_while(&|c| c.is_digit(10))
         }
         let val: f64 = self.source[self.start_idx..self.current_idx].parse().unwrap();
-        Ok(Token::new(Type::Number(val), self.token_pos, &self.source[self.start_idx..self.current_idx]))     
+        Ok(Token::new(Type::Number(val), self.token_pos, &self.get_substr_from_current_range()))     
+    }
+
+    /// Tokenize a string literal
+    fn string(&mut self) -> LexerResult<'a> {
+        // Advance until closing `"` is found or the iterator reaches the end in which case an
+        // error is returned.
+        while !self.is_at_end() && self.chars.peek() != Some(&'\"') {
+            // Don't known whether multi-line strings should be implemented. Might complicate things quite a bit.
+            //if self.chars.peek() == Some(&'\n') {
+            //    self.token_pos.next_line();
+            //}
+            self.advance();
+        }
+        if self.is_at_end() {
+            return Err(Box::new(SyntaxError::new(self.token_pos, "missing clossing \".".to_string())));
+        }
+        // Advance over "
+        self.advance();
+        let val = self.source[self.start_idx + 1 .. self.current_idx - 1].to_string();
+        Ok(Token::new(Type::String(val), self.token_pos, &self.get_substr_from_current_range()))
+    }
+
+    //----------------------
+    // Identifier & keywords
+    //----------------------
+
+    // 
+    fn keyword(&mut self) -> LexerResult<'a> {
+        self.advance_while(&|x| x.is_alphabetic());
+        let substr = self.get_substr_from_current_range();
+        // If it's not a known keyword it has to be an identifier
+        let typ = Token::get_keyword(substr).unwrap_or(Type::Identifier);
+        self.new_token(typ)
     }
 }
 
