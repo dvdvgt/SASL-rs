@@ -1,20 +1,21 @@
-use std::{env, fs, io::{self, Read}};
 use io::Write;
+use std::{
+    env, fs,
+    io::{self, Read},
+};
 
-use frontend::lexer::Lexer;
-
-mod frontend;
-mod error;
+use sasl::frontend::lexer::Lexer;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     match args.len() {
         1 => run_prompt(),
         2 => run_file(&args[1]),
-        _ => panic!("Unsupported number of arguments.")
+        _ => panic!("Unsupported number of arguments."),
     }
 }
 
+/// Starts a REPL like prompt used for entering single expressions. Useful for interactive debugging.
 fn run_prompt() {
     let mut inpt = String::new();
     loop {
@@ -29,6 +30,7 @@ fn run_prompt() {
     }
 }
 
+/// Reads and runs a file.
 fn run_file(path: &str) {
     let mut file = fs::File::open(path).unwrap();
     let mut src = String::new();
@@ -37,7 +39,8 @@ fn run_file(path: &str) {
     run(&src);
 }
 
-fn run(src: &str) {
+/// Runs a string input.
+pub fn run(src: &str) {
     let mut lx = Lexer::new(src);
     match lx.tokenize() {
         Err(e) => eprintln!("{}", e),

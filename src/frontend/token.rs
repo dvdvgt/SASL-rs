@@ -1,32 +1,36 @@
+use phf::phf_map;
 use std::fmt;
-use phf::{phf_map};
 
 use super::utils::Position;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub typ: Type,
-    pos: Position,
-    lexeme: &'a str
+    pub pos: Position,
+    lexeme: &'a str,
 }
 
 impl<'a> Token<'a> {
-    pub fn new_non_literal(typ: Type, pos: Position, src: &'a str, range: std::ops::Range<usize>) -> Self {
+    pub fn new_non_literal(
+        typ: Type,
+        pos: Position,
+        src: &'a str,
+        range: std::ops::Range<usize>,
+    ) -> Self {
         Self {
-            typ, pos,
-            lexeme: &src[range]
+            typ,
+            pos,
+            lexeme: &src[range],
         }
     }
     pub fn new(typ: Type, pos: Position, lexeme: &'a str) -> Self {
-        Self {
-            typ, pos, lexeme
-        }
+        Self { typ, pos, lexeme }
     }
 
     pub fn get_keyword(key: &str) -> Option<Type> {
         match KEYWORDS.get(key) {
             Some(tok) => Some(tok.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -45,21 +49,43 @@ pub enum Type {
     Boolean(bool),
     Nil,
     // keywords
-    Def, Where, If, Then, Else,
+    Def,
+    Where,
+    If,
+    Then,
+    Else,
     // Boolean operators
-    And, Or, Not,
+    And,
+    Or,
+    Not,
     // Builtin
-    Head, Tail,
+    Head,
+    Tail,
     // Unary/Binary operators
-    Plus, Minus, Mult, Div,
+    Plus,
+    Minus,
+    Mult,
+    Div,
 
-    Equal, NotEqual, Less, Greater, Leq, Geq,
+    Equal,
+    NotEqual,
+    Less,
+    Greater,
+    Leq,
+    Geq,
 
     Identifier,
 
-    Dot, LeftParenthese, RightParenthese, LeftBrackets, RightBrackets, Comma, Colon, Semicolon,
+    Dot,
+    LeftParenthese,
+    RightParenthese,
+    LeftBrackets,
+    RightBrackets,
+    Comma,
+    Colon,
+    Semicolon,
 
-    Whitespace
+    Whitespace,
 }
 
 static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {

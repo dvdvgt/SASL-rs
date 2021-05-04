@@ -8,3 +8,10 @@ edition = "2018"
 
 [dependencies]
 phf = { version = "0.8.0", features = ["macros"] }
+
+[dev-dependencies]
+#criterion = "0.3.4"
+
+#[[bench]]
+#name = "bench_lexer"
+#harness = false

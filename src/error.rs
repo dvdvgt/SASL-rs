@@ -1,27 +1,27 @@
-use std::{error::Error, fmt::Display, fmt};
+use std::{error::Error, fmt, fmt::Display};
 
 use crate::frontend::utils::Position;
 
 #[derive(Debug)]
-pub struct SyntaxError {
-    pos: Position,
-    details: String
+pub enum SaslError {
+    SyntaxError { pos: Position, msg: String },
+    ParseError { pos: Position, msg: String },
 }
 
-impl SyntaxError {
-    pub fn new(pos: Position, details: String) -> Self {
-        Self { pos, details }
-    }
-}
-
-impl Display for SyntaxError {
+impl Display for SaslError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Syntax error at {}: {}", self.pos, self.details)
+        match self {
+            SaslError::SyntaxError { pos, msg } => write!(f, "Syntax error at {}: {}", pos, msg),
+            SaslError::ParseError { pos, msg } => write!(f, "Parse error at {}: {}", pos, msg),
+        }
     }
 }
 
-impl Error for SyntaxError {
+impl Error for SaslError {
     fn description(&self) -> &str {
-        &self.details
+        match self {
+            SaslError::SyntaxError { pos: _, msg } => msg,
+            SaslError::ParseError { pos: _, msg } => msg,
+        }
     }
 }

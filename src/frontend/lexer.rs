@@ -2,8 +2,11 @@
 
 use std::{collections::VecDeque, error::Error, iter::Peekable, str::Chars};
 
-use super::{token::{Token, Type}, utils::Position};
-use crate::error::SyntaxError;
+use super::{
+    token::{Token, Type},
+    utils::Position,
+};
+use crate::error::SaslError::SyntaxError;
 
 pub struct Lexer<'a> {
     source: &'a str,
@@ -11,13 +14,13 @@ pub struct Lexer<'a> {
     tokens: VecDeque<Token<'a>>,
     token_pos: Position,
     start_idx: usize,
-    current_idx: usize
+    current_idx: usize,
 }
 
 type LexerResult<'a> = Result<Token<'a>, Box<dyn Error>>;
 
 impl<'a> Lexer<'a> {
-    // Create a new instance of `Lexer`
+    /// Create a new instance of `Lexer`
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
@@ -25,12 +28,12 @@ impl<'a> Lexer<'a> {
             tokens: VecDeque::new(),
             token_pos: Position::new(1, 1, 0),
             start_idx: 0,
-            current_idx: 0
+            current_idx: 0,
         }
     }
 
     /// Tokenize source string.
-    pub fn tokenize(&mut self) -> Result<&VecDeque<Token<'a>>, Box<dyn Error>> {
+    pub fn tokenize(&mut self) -> Result<&mut VecDeque<Token<'a>>, Box<dyn Error>> {
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
             let token = self.next_token()?;
@@ -39,61 +42,67 @@ impl<'a> Lexer<'a> {
             }
             self.token_pos.start_column = self.token_pos.end_column + 1;
         }
-        Ok(&self.tokens)
+        Ok(&mut self.tokens)
     }
 
     /// Return the next token.
     fn next_token(&mut self) -> LexerResult<'a> {
         match self.advance() {
-        Some('(') => self.new_token(Type::LeftParenthese),
-        Some(')') => self.new_token(Type::RightParenthese),
-        Some('[') => self.new_token(Type::LeftBrackets),
-        Some(']') => self.new_token(Type::RightBrackets),
-        Some('.') => self.new_token(Type::Dot),
-        Some(',') => self.new_token(Type::Comma),
-        Some(':') => self.new_token(Type::Colon),
-        Some(';') => self.new_token(Type::Semicolon),
-        Some('=') => self.new_token(Type::Equal),
-        Some('~') if self.chars.peek() == Some(&'=') => {
-            self.advance();
-            self.new_token(Type::NotEqual)
-        },
-        Some('<') => match self.advance_if(&'=') {
-            Some(_) => self.new_token(Type::Leq),
-            _ => self.new_token(Type::Less)
-        },
-        Some('>') => match self.advance_if(&'=') {
-            Some(_) => self.new_token(Type::Geq),
-            _ => self.new_token(Type::Greater)
-        }
-        Some('+') => self.new_token(Type::Plus),
-        Some('-') => self.new_token(Type::Minus),
-        Some('*') => self.new_token(Type::Mult),
-        Some('/') => match self.advance_if(&'/') {
-            Some(_) => {
-                self.advance_while(&|x| x != &'\n');
+            Some('(') => self.new_token(Type::LeftParenthese),
+            Some(')') => self.new_token(Type::RightParenthese),
+            Some('[') => self.new_token(Type::LeftBrackets),
+            Some(']') => self.new_token(Type::RightBrackets),
+            Some('.') => self.new_token(Type::Dot),
+            Some(',') => self.new_token(Type::Comma),
+            Some(':') => self.new_token(Type::Colon),
+            Some(';') => self.new_token(Type::Semicolon),
+            Some('=') => self.new_token(Type::Equal),
+            Some('~') if self.chars.peek() == Some(&'=') => {
+                self.advance();
+                self.new_token(Type::NotEqual)
+            }
+            Some('<') => match self.advance_if(&|x| x == &'=') {
+                Some(_) => self.new_token(Type::Leq),
+                _ => self.new_token(Type::Less),
+            },
+            Some('>') => match self.advance_if(&|x| x == &'=') {
+                Some(_) => self.new_token(Type::Geq),
+                _ => self.new_token(Type::Greater),
+            },
+            Some('+') => self.new_token(Type::Plus),
+            Some('-') => self.new_token(Type::Minus),
+            Some('*') => self.new_token(Type::Mult),
+            Some('/') => match self.advance_if(&|x| x == &'/') {
+                Some(_) => {
+                    self.advance_while(&|x| x != &'\n');
+                    self.new_token(Type::Whitespace)
+                }
+                _ => self.new_token(Type::Div),
+            },
+
+            Some(' ') | Some('\t') | Some('\r') => self.new_token(Type::Whitespace), // Whitespaces will be discarded
+            Some('\n') => {
+                self.token_pos.next_line();
                 self.new_token(Type::Whitespace)
             }
-            _ => self.new_token(Type::Div)
-        }
-
-        Some(' ') | Some('\t') | Some('\r') => self.new_token(Type::Whitespace), // Whitespaces will be discarded
-        Some('\n') => {
-            self.token_pos.next_line();
-            self.new_token(Type::Whitespace)
-        },
-        Some('\"') => self.string(),
-        // Literals, keywords
-        Some(c) => {
-            if c.is_digit(10) {
-                self.number()
-            } else if c.is_alphabetic() {
-                self.keyword()
-            } else {
-                Err(Box::new(SyntaxError::new(self.token_pos, "unkown keyword/identifier.".to_string())))
+            Some('\"') => self.string(),
+            // Literals, keywords
+            Some(c) => {
+                if c.is_digit(10) {
+                    self.number()
+                } else if c.is_alphabetic() {
+                    self.keyword()
+                } else {
+                    Err(Box::new(SyntaxError {
+                        pos: self.token_pos,
+                        msg: "Invalid keyword/identifier.".to_string(),
+                    }))
+                }
             }
-        }
-        _ => Err(Box::new(SyntaxError::new(self.token_pos, "unkown input.".to_string())))
+            _ => Err(Box::new(SyntaxError {
+                pos: self.token_pos,
+                msg: "Invalid input.".to_string(),
+            })),
         }
     }
 
@@ -103,14 +112,19 @@ impl<'a> Lexer<'a> {
 
     /// Extracts a substring from the source string starting at `start_index` and ending at `current_index`.
     fn get_substr_from_current_range(&self) -> &'a str {
-        &self.source[self.start_idx .. self.current_idx]
+        &self.source[self.start_idx..self.current_idx]
     }
 
     /// Convenience function for creating new `Token`s easily.
     fn new_token(&self, typ: Type) -> LexerResult<'a> {
-        Ok(Token::new_non_literal(typ, self.token_pos, self.source, self.start_idx..self.current_idx))
+        Ok(Token::new_non_literal(
+            typ,
+            self.token_pos,
+            self.source,
+            self.start_idx..self.current_idx,
+        ))
     }
-    
+
     /// Consume the current iterator and return the char it pointed at.
     /// If the iterator reached the `None` will be returned.
     fn advance(&mut self) -> Option<char> {
@@ -120,15 +134,15 @@ impl<'a> Lexer<'a> {
     }
 
     /// Only advance the iterator if the next character is the expected one.
-    fn advance_if(&mut self, expected: &char) -> Option<char> {
+    fn advance_if(&mut self, predicate: &dyn Fn(&char) -> bool) -> Option<char> {
         match self.chars.peek() {
-            Some(c) if c == expected => self.advance(),
-            _ => None
+            Some(c) if predicate(c) => self.advance(),
+            _ => None,
         }
     }
 
     /// Consumes all iterators while a given predicate is fullfilled.
-    /// 
+    ///
     /// ## Example
     /// advance_while(&mut self, &|c| c.is_alphabetic());
     fn advance_while(&mut self, predicate: &dyn Fn(&char) -> bool) {
@@ -141,7 +155,7 @@ impl<'a> Lexer<'a> {
                     }
                     self.advance();
                 }
-                None => break
+                None => break,
             }
         }
     }
@@ -161,12 +175,21 @@ impl<'a> Lexer<'a> {
         if self.chars.peek() == Some(&'.') {
             self.advance();
             if !self.chars.peek().unwrap().is_digit(10) {
-                return Err(Box::new(SyntaxError::new(self.token_pos, "expected floating point number.".to_string())));
+                return Err(Box::new(SyntaxError {
+                    pos: self.token_pos,
+                    msg: "expected floating point number.".to_string(),
+                }));
             }
             self.advance_while(&|c| c.is_digit(10))
         }
-        let val: f64 = self.source[self.start_idx..self.current_idx].parse().unwrap();
-        Ok(Token::new(Type::Number(val), self.token_pos, &self.get_substr_from_current_range()))     
+        let val: f64 = self.source[self.start_idx..self.current_idx]
+            .parse()
+            .unwrap();
+        Ok(Token::new(
+            Type::Number(val),
+            self.token_pos,
+            &self.get_substr_from_current_range(),
+        ))
     }
 
     /// Tokenize a string literal
@@ -181,21 +204,29 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
         if self.is_at_end() {
-            return Err(Box::new(SyntaxError::new(self.token_pos, "missing clossing \".".to_string())));
+            return Err(Box::new(SyntaxError {
+                pos: self.token_pos,
+                msg: "missing clossing \".".to_string(),
+            }));
         }
         // Advance over "
         self.advance();
-        let val = self.source[self.start_idx + 1 .. self.current_idx - 1].to_string();
-        Ok(Token::new(Type::String(val), self.token_pos, &self.get_substr_from_current_range()))
+
+        let val = self.source[self.start_idx + 1..self.current_idx - 1].to_string();
+        Ok(Token::new(
+            Type::String(val),
+            self.token_pos,
+            &self.get_substr_from_current_range(),
+        ))
     }
 
     //----------------------
     // Identifier & keywords
     //----------------------
 
-    // 
+    /// Checks whether the following character stream is a known keyword. If not it has to be an identifier.
     fn keyword(&mut self) -> LexerResult<'a> {
-        self.advance_while(&|x| x.is_alphabetic());
+        self.advance_while(&|x| x.is_alphanumeric());
         let substr = self.get_substr_from_current_range();
         // If it's not a known keyword it has to be an identifier
         let typ = Token::get_keyword(substr).unwrap_or(Type::Identifier);
@@ -215,6 +246,14 @@ mod tests {
         assert_eq!(lx.token_pos.start_column, 1);
         assert_eq!(lx.token_pos.end_column, 1);
         assert_eq!(lx.advance(), Some('.'));
+    }
+
+    #[test]
+    fn test_advance_if() {
+        let mut lx = Lexer::new("1 + 2 * 5");
+        assert_eq!(lx.advance_if(&|x| x.is_digit(10)), Some('1'));
+        lx.advance();
+        assert_eq!(lx.advance_if(&|x| x.is_alphanumeric()), None);
     }
 
     #[test]
