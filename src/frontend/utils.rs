@@ -3,7 +3,7 @@
 use std::fmt::{Display, Formatter, Result};
 
 /// Relative position of a `Token` in the source file/source code.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Position {
     pub line: u32,
     pub start_column: u32,

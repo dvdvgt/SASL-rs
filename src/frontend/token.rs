@@ -7,7 +7,7 @@ use super::utils::Position;
 pub struct Token<'a> {
     pub typ: Type,
     pub pos: Position,
-    lexeme: &'a str,
+    pub lexeme: &'a str,
 }
 
 impl<'a> Token<'a> {
