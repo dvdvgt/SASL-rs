@@ -2,6 +2,7 @@ use phf::phf_map;
 use std::fmt;
 
 use super::utils::Position;
+use crate::T;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
@@ -86,6 +87,52 @@ pub enum Type {
     Semicolon,
 
     Whitespace,
+    Eof
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f, "{}",
+            match self {
+                Type::String(x) => format!("String:{}", x),
+                Type::Number(x) => format!("Number:{}", x),
+                Type::Boolean(x) => format!("Boolean:{}", x),
+                T![nil] => "nil".to_string(),
+                T![def] => "Def".to_string(),
+                T![where] => "where".to_string(),
+                T![if] => "if".to_string(),
+                T![then] => "then".to_string(),
+                T![else] => "else".to_string(),
+                T![and] => "and".to_string(),
+                T![or] => "or".to_string(),
+                T![not] => "not".to_string(),
+                T![head] => "hd".to_string(),
+                T![tail] => "tl".to_string(),
+                T![+] => "+".to_string(),
+                T![-] => "-".to_string(),
+                T![*] => "*".to_string(),
+                T![/] => "/".to_string(),
+                T![=] => "=".to_string(),
+                T![~=] => "~=".to_string(),
+                T![<] => "<".to_string(),
+                T![>] => ">".to_string(),
+                T![<=] => "<=".to_string(),
+                T![>=] => ">=".to_string(),
+                T![ident] => "Identifier".to_string(),
+                T![.] => ".".to_string(),
+                T![,] => ",".to_string(),
+                T![:] => ":".to_string(),
+                T![;] => ";".to_string(),
+                T!['('] => "(".to_string(),
+                T![')'] => ")".to_string(),
+                T!['['] => "[".to_string(),
+                T![']'] => "]".to_string(),
+                Type::Whitespace => " ".to_string(),
+                T![eof] => "<EOF>".to_string()
+            }
+        )
+    }
 }
 
 static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
@@ -103,3 +150,100 @@ static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
     "true" => Type::Boolean(true),
     "false" => Type::Boolean(false)
 };
+
+#[macro_export]
+macro_rules! T {
+    [+] => {
+        $crate::frontend::token::Type::Plus
+    };
+    [-] => {
+        $crate::frontend::token::Type::Minus
+    };
+    [*] => {
+        $crate::frontend::token::Type::Mult
+    };
+    [/] => {
+        $crate::frontend::token::Type::Div
+    };
+    [=] => {
+        $crate::frontend::token::Type::Equal
+    };
+    [~=] => {
+        $crate::frontend::token::Type::NotEqual
+    };
+    [<] => {
+        $crate::frontend::token::Type::Less
+    };
+    [>] => {
+        $crate::frontend::token::Type::Greater
+    };
+    [<=] => {
+        $crate::frontend::token::Type::Leq
+    };
+    [>=] => {
+        $crate::frontend::token::Type::Geq
+    };
+    [nil] => {
+        $crate::frontend::token::Type::Nil
+    };
+    [and] => {
+        $crate::frontend::token::Type::And
+    };
+    [or] => {
+        $crate::frontend::token::Type::Or
+    };
+    [not] => {
+        $crate::frontend::token::Type::Not
+    };
+    [head] => {
+        $crate::frontend::token::Type::Head
+    };
+    [tail] => {
+        $crate::frontend::token::Type::Tail
+    };
+    [ident] => {
+        $crate::frontend::token::Type::Identifier
+    };
+    [def] => {
+        $crate::frontend::token::Type::Def
+    };
+    [where] => {
+        $crate::frontend::token::Type::Where
+    };
+    [if] => {
+        $crate::frontend::token::Type::If
+    };
+    [then] => {
+        $crate::frontend::token::Type::Then
+    };
+    [else] => {
+        $crate::frontend::token::Type::Else
+    };
+    [.] => {
+        $crate::frontend::token::Type::Dot
+    };
+    ['['] => {
+        $crate::frontend::token::Type::LeftBrackets
+    };
+    [']'] => {
+        $crate::frontend::token::Type::RightBrackets
+    };
+    ['('] => {
+        $crate::frontend::token::Type::LeftParenthese
+    };
+    [')'] => {
+        $crate::frontend::token::Type::RightParenthese
+    };
+    [,] => {
+        $crate::frontend::token::Type::Comma
+    };
+    [;] => {
+        $crate::frontend::token::Type::Semicolon
+    };
+    [:] => {
+        $crate::frontend::token::Type::Colon
+    };
+    [eof] => {
+        $crate::frontend::token::Type::Eof
+    };
+}

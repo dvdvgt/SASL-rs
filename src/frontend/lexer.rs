@@ -42,6 +42,8 @@ impl<'a> Lexer<'a> {
             }
             self.token_pos.start_column = self.token_pos.end_column + 1;
         }
+        self.start_idx = self.current_idx;
+        self.tokens.push_back(self.new_token(Type::Eof)?);
         Ok(&mut self.tokens)
     }
 
@@ -264,11 +266,5 @@ mod tests {
         let mut lx2 = Lexer::new("123.45678");
         lx2.advance_while(&|x| x.is_digit(10));
         assert_eq!(lx2.advance(), Some('.'));
-    }
-
-    #[test]
-    fn test_tokenize() {
-        let mut lx = Lexer::new("(123.34 = 12) // A comment that will be ignored");
-        println!("{:?}", lx.tokenize().unwrap());
     }
 }

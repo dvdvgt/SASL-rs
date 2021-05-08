@@ -1,88 +1,71 @@
 //! Abstract syntax tree implementation.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
-use super::{token::Token, utils::Position};
+use super::{token::Type, utils::Position};
 
-/// Represents a variable/function identifier.
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct Ident<'a> {
-    name: &'a str,
-    pos: Position
+#[derive(Debug, Hash, Clone, PartialEq)]
+pub struct Def {
+    name: String,
+    pos: Position,
+    params: Option<Vec<String>>
 }
 
-impl<'a> Ident<'a> {
-    pub fn token_to_ident(t: Token<'a>) -> Self {
-        Self {
-            pos: t.pos, name: t.lexeme
-        }
-    }
+pub struct Ast {
+    global_defs: HashMap<Def, AstNode>,
+    //root: AstNode,
+    body: AstNode,
 }
 
-/// Type alias for parameter vectors.
-type Params<'a> = Vec<Ident<'a>>;
-
-/// Represents a variable/function definition.
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct Def<'a> {
-    pub name: Ident<'a>,
-    pub params: Option<Params<'a>>
-}
-
-impl<'a> Def<'a> {
-    /// True if the definition has parameters i.e. is a function.
-    pub fn is_func(&self) -> bool {
-        match self.params {
-            Some(_) => true,
-            _ => false
-        }
-    }
-
-    /// True if the definition does not have parameters i.e. is a constant.
-    pub fn is_const(&self) -> bool {
-        !self.is_func()
-    }
-}
-
-/// Represents either a local or global environment
-/// with defintions of variables or functions.
-#[derive(Debug)]
-pub struct Env<'a> {
-    defs: HashMap<Def<'a>, Expr<'a>>
-}
-
-impl<'a> Env<'a> {
-    pub fn new() -> Self {
-        Self { defs: HashMap::new() }
-    }
-
-    /// Insertion a new definition into the environment.
-    pub fn add_def(&mut self, def: Def<'a>, expr: Expr<'a>) {
-        self.defs.insert(def, expr);
-    }
-
-    /// looks up the corresponding AST/expression to a definition.
-    pub fn lookup_def(&self, def: &Def<'a>) -> Option<&Expr<'a>> {
-        self.defs.get(def)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Everything is an expression in SASL.
-pub enum Expr<'a> {
-    // Local and global environments
-    Program(Env<'a>, Box<Expr<'a>>),
-    Where(Env<'a>, Box<Expr<'a>>),
+pub enum AstNode {
+    /*Where(
+        HashMap<Def, Ast>, Box<Ast>, Box<Ast>
+    ),*/
     /// Function application used for currying functions
-    App(Box<Expr<'a>>, Box<Expr<'a>>),
+    App(Box<AstNode>, Box<AstNode>),
     // Variable/function identifier
-    Ident(Ident<'a>),
+    Ident(String),
     // Atomics
-    Constant(Token<'a>),
+    Constant(Type),
     // Predefinied functions
-    Builtin(Token<'a>),
-    // Conditional expression / teneray operator
-    Cond,
+    Builtin(Op),
     // Empty expression
     Empty,
+}
+
+impl fmt::Display for AstNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f, "{}",
+            match self {
+                AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
+                AstNode::Ident(s) => format!("var:{}", s),
+                AstNode::Constant(t) => t.to_string(),
+                AstNode::Builtin(op) => format!("{}", op),
+                AstNode::Empty => "empty".to_string()
+            }
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Op {
+    PrefixOp(Type),
+    InfixOp(Type),
+    //PostfixOp(Type),
+    Cond
+}
+
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f, "{}", 
+            match self {
+                Op::PrefixOp(t) | Op::InfixOp(t) => t.to_string(),
+                Op::Cond => "cond".to_string()
+            }
+        )
+    }
 }

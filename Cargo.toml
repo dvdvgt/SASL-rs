@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 phf = { version = "0.8.0", features = ["macros"] }
+dot = "0.1.4"
 
 [dev-dependencies]
 #criterion = "0.3.4"
