@@ -5,6 +5,7 @@ use std::{
 };
 
 use sasl::frontend::lexer::Lexer;
+use sasl::frontend::parser::Parser;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,10 +23,11 @@ fn run_prompt() {
         print!("> ");
         io::stdout().flush().unwrap();
         let num_bytes = io::stdin().read_line(&mut inpt).unwrap();
+        let line = inpt.trim_end();
         if num_bytes == 0 {
             break;
         }
-        run(&inpt);
+        run(line);
         inpt.clear();
     }
 }
@@ -42,12 +44,23 @@ fn run_file(path: &str) {
 /// Runs a string input.
 pub fn run(src: &str) {
     let mut lx = Lexer::new(src);
-    match lx.tokenize() {
-        Err(e) => eprintln!("{}", e),
-        Ok(tokens) => {
-            for token in tokens {
-                println!("\t{}", token);
-            }
+    let tokens = lx.tokenize();
+    println!("Tokens:");
+    match tokens {
+        Err(ref e) => {
+            eprintln!("{}", e);
+            return
         }
+        Ok(ref tokens) => {
+            tokens.iter()
+                .for_each(|token| println!("\t{}", token))
+        }
+    }
+    println!("AST:");
+    let mut parser = Parser::new(tokens.unwrap());
+    let expr = parser.parse_expr();
+    match expr {
+        Err(ref e) => eprintln!("{}", e),
+        Ok(ref ast) => println!("\t{}", ast)
     }
 }

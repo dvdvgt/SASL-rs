@@ -7,7 +7,6 @@ use super::{token::Type, utils::Position};
 #[derive(Debug, Hash, Clone, PartialEq)]
 pub struct Def {
     name: String,
-    pos: Position,
     params: Option<Vec<String>>
 }
 
@@ -20,9 +19,7 @@ pub struct Ast {
 #[derive(Debug, Clone)]
 /// Everything is an expression in SASL.
 pub enum AstNode {
-    /*Where(
-        HashMap<Def, Ast>, Box<Ast>, Box<Ast>
-    ),*/
+    Where(Box<AstNode>, HashMap<Def, AstNode>),
     /// Function application used for currying functions
     App(Box<AstNode>, Box<AstNode>),
     // Variable/function identifier
@@ -40,6 +37,7 @@ impl fmt::Display for AstNode {
         write!(
             f, "{}",
             match self {
+                AstNode::Where(ast, defs) => format!("{} where", ast),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
                 AstNode::Ident(s) => format!("var:{}", s),
                 AstNode::Constant(t) => t.to_string(),

@@ -1,9 +1,9 @@
 //! Recursive descent parser implementation
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 
-use super::{ast::{AstNode, Op}, utils::Position};
+use super::{ast::{AstNode, Op, Def}, utils::Position};
 use super::token::{Token, Type};
 use crate::error::SaslError::{ParseError, self};
 use crate::T;
@@ -13,6 +13,7 @@ pub struct Parser<'a> {
 }
 
 type ParserResult = Result<AstNode, Box<dyn Error>>;
+type Defs = HashMap<Def, AstNode>;
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: VecDeque<Token<'a>>) -> Self {
@@ -77,11 +78,29 @@ impl<'a> Parser<'a> {
     //--------
     // PARSING
     //--------
+    fn parse_defs() {
+        todo!()
+    }
 
-    fn parse_expr(&mut self) -> ParserResult {
+    fn parse_defs1() {
+        todo!()
+    }
+
+    fn parse_def() {
+        todo!()
+    }
+
+    fn parse_abstraction(&mut self) -> ParserResult {
+        todo!()
+    }
+
+    pub fn parse_expr(&mut self) -> ParserResult {
         self.parse_condexpr()
     }
 
+    fn parse_expr1(&mut self) -> ParserResult {
+        todo!();
+    }
 
     fn parse_condexpr(&mut self) -> ParserResult {
         if self.expect_type(T![if]) {
@@ -92,15 +111,9 @@ impl<'a> Parser<'a> {
             self.consume(&T![else]);
             let else_expr = self.parse_condexpr()?;
             Ok(
-                AstNode::App(
-                    Box::new(AstNode::App(
-                        Box::new(AstNode::App(
-                            Box::new(AstNode::Builtin(Op::Cond)),
-                            Box::new(predicate)
-                        )),
-                        Box::new(then_expr)
-                    )),
-                    Box::new(else_expr)
+                self.apply2(
+                    self.apply3(AstNode::Builtin(Op::Cond), predicate, then_expr), 
+                    else_expr
                 )
             )
         } else {
@@ -279,8 +292,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /////
-
     fn parse_name(&mut self) -> ParserResult {
         if self.peek() == &T![ident] {
             let id_name = self.next()
@@ -427,21 +438,20 @@ mod tests {
     use super::*;
     use crate::frontend::lexer::Lexer;
     use crate::frontend::token::{Token, Type};
-    use crate::frontend::utils::Position;
+
+    fn parse(input: &str) -> AstNode {
+        let mut lx = Lexer::new(input);
+        let tokens = lx.tokenize().unwrap().clone();
+        let mut parser = Parser::new(tokens);
+        parser.parse_expr().unwrap()
+    }
 
     #[test]
-    fn parse_expression() {
-        fn parse(input: &str) -> AstNode {
-            let mut lx = Lexer::new(input);
-            let tokens = lx.tokenize().unwrap().clone();
-            let mut parser = Parser::new(tokens);
-            parser.parse_expr().unwrap()
-        }
-
-        println!("{}", parse("[1,2,\"abc\", true, someNum]"));
-
-        //assert_eq!(expr, Ast::Constant(Token::new(Type::Number(42.0), Position::new(1, 1, 2), "42")));
-        println!("{}", parse("if addOne 42 3 \"hallo\" true then 1 else 2"));
-        //assert_eq!(expr, Ast::Empty);
+    fn parse_basic_epxr() {
+        let expr = parse("[1,2,\"ab\", true, 5.6, id]");
+        assert_eq!(
+            expr.to_string(), 
+            "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ var:id) @ nil))))))"
+        );
     }
 }

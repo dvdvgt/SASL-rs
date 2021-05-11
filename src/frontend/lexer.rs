@@ -33,7 +33,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Tokenize source string.
-    pub fn tokenize(&mut self) -> Result<&mut VecDeque<Token<'a>>, Box<dyn Error>> {
+    pub fn tokenize(&mut self) -> Result<VecDeque<Token<'a>>, Box<dyn Error>> {
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
             let token = self.next_token()?;
@@ -44,7 +44,7 @@ impl<'a> Lexer<'a> {
         }
         self.start_idx = self.current_idx;
         self.tokens.push_back(self.new_token(Type::Eof)?);
-        Ok(&mut self.tokens)
+        Ok(self.tokens.clone())
     }
 
     /// Return the next token.
