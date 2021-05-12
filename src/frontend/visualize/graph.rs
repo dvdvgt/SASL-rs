@@ -46,7 +46,7 @@ impl Display for Graph {
         for edge in self.edges.iter() {
             writeln!(f, "\t{}", edge)?;
         }
-        write!(f, "}};")
+        write!(f, "}}")
     }
 }
 
@@ -67,7 +67,7 @@ impl Node {
 impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.label {
-            Some(ref l) => write!(f, "{} [ label={} ];", self.id, l),
+            Some(ref l) => write!(f, "{} [ label=\"{}\" ];", self.id, l),
             None => write!(f, "{};", self.id)
         }
     }
@@ -147,7 +147,7 @@ mod test {
         let mut buf = String::new();
         empty_graph.as_dot(&mut buf).unwrap();
 
-        assert_eq!(buf, "digraph empty {\n};");
+        assert_eq!(buf, "digraph empty {\n}");
     }
 
     #[test]
@@ -169,8 +169,8 @@ mod test {
         graph.as_dot(&mut buf).unwrap();
         assert_eq!(
             buf,
-            "digraph g {\n\tnode1 [ label=a ];\n\tnode2 [ label=b ];\n\tnode3 [ label=c ];\
-            \n\tnode1 -> node1;\n\tnode1 -> node2;\n\tnode3 -> node1;\n};"
+            "digraph g {\n\tnode1 [ label=\"a\" ];\n\tnode2 [ label=\"b\" ];\n\tnode3 [ label=\"c\" ];\
+            \n\tnode1 -> node1;\n\tnode1 -> node2;\n\tnode3 -> node1;\n}"
         );
     }
 
@@ -193,8 +193,8 @@ mod test {
         graph.as_dot(&mut buf).unwrap();
         assert_eq!(
             buf,
-            "graph g {\n\tnode1 [ label=a ];\n\tnode2 [ label=b ];\n\tnode3 [ label=c ];\
-            \n\tnode1 -- node1;\n\tnode1 -- node2;\n\tnode3 -- node1;\n};"
+            "graph g {\n\tnode1 [ label=\"a\" ];\n\tnode2 [ label=\"b\" ];\n\tnode3 [ label=\"c\" ];\
+            \n\tnode1 -- node1;\n\tnode1 -- node2;\n\tnode3 -- node1;\n}"
         );
     }
 }

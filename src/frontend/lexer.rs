@@ -7,6 +7,7 @@ use super::{
     utils::Position,
 };
 use crate::error::SaslError::SyntaxError;
+use crate::T;
 
 pub struct Lexer<'a> {
     source: &'a str,
@@ -42,8 +43,15 @@ impl<'a> Lexer<'a> {
             }
             self.token_pos.start_column = self.token_pos.end_column + 1;
         }
+        // Add end of file token at the end.
         self.start_idx = self.current_idx;
-        self.tokens.push_back(self.new_token(Type::Eof)?);
+        self.tokens.push_back(
+            Token::new(
+                T![eof],
+                Position::new(self.token_pos.line, self.start_idx as u32, self.current_idx as u32),
+            "EOF"
+            )
+        );
         Ok(self.tokens.clone())
     }
 
