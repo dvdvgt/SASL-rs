@@ -29,6 +29,14 @@ impl Visualizer {
         match ast {
             AstNode::Empty => (),
             AstNode::Ident(x) => self.add_node(format!("Id:{}", x)),
+            AstNode::Where(Some(lhs_expr), _, _) => {
+                let where_name = format!("{}{}", Visualizer::NODE_NAME_PREFIX, self.node_counter);
+                self.add_node("where".to_string());
+
+                let lhs_name = format!("{}{}", Visualizer::NODE_NAME_PREFIX, self.node_counter);
+                self.add_edge(&where_name, &lhs_name);
+                self.visualize_ast(lhs_expr);
+            }
             // Constants
             AstNode::Constant(Type::String(x)) => self.add_node(format!("String:{}", x)),
             AstNode::Constant(Type::Number(x)) => self.add_node(format!("Num:{}", x)),
@@ -74,14 +82,14 @@ impl Visualizer {
         )
     }
 
-    pub fn write_to_png(&self, outfile: &str) {
+    pub fn write_to_pdf(&self, outfile: &str) {
         // Get graph represented in graphviz DOT language
         let mut buf = String::new();
         self.graph.as_dot(&mut buf).unwrap();
 
         let mut dot = Command::new("dot")
             .stdin(Stdio::piped())
-            .arg("-Tpng")
+            .arg("-Tpdf")
             .arg(format!("-o {}", outfile))
             .spawn().expect("Unable to create AST visualization. Graphviz is probably not installed");
 
@@ -106,9 +114,9 @@ mod tests {
 
     #[test]
     fn test_visualizer() {
-        let ast = parse("fn 1+2 true (if [1,2,\"abc\"] then 5.5 else 3.2)");
+        let ast = parse("1 + 2 where a = 1; b = 2; c d e = d + e");
         let mut vis = Visualizer::new("g", false);
         vis.visualize_ast(&ast);
-        vis.write_to_png("graph.png");
+        vis.write_to_pdf("graph.pdf");
     }
 }

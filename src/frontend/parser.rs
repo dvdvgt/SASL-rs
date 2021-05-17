@@ -1,11 +1,11 @@
 //! Recursive descent parser implementation
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{hash_map::HashMap, VecDeque};
 use std::error::Error;
 
 use super::{ast::{AstNode, Op, Def}, utils::Position};
 use super::token::{Token, Type};
-use crate::error::SaslError::{ParseError, self};
+use crate::{error::SaslError::{ParseError, self}};
 use crate::T;
 
 pub struct Parser<'a> {
@@ -75,31 +75,85 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn merge_defs(map1: & Defs, map2: &Defs) -> Defs {
+        todo!()
+    }
+
     //--------
     // PARSING
     //--------
-    fn parse_defs() {
-        todo!()
+    fn parse_defs(&mut self) -> Defs {
+        let mut defs = HashMap::new();
+        let def = self.parse_def();
+        defs.insert(def.0, def.1);
+        self.parse_defs1(&mut defs);
+        defs
     }
 
-    fn parse_defs1() {
-        todo!()
+    fn parse_defs1(&mut self, defs: &mut Defs) {
+        if self.expect_type(T![;]) {
+            self.consume(&T![;]);
+            let def = self.parse_def();
+            defs.insert(def.0, def.1);
+            self.parse_defs1(defs);
+        } else {
+            return
+        }
     }
 
-    fn parse_def() {
-        todo!()
+    fn parse_def(&mut self) -> (Def, AstNode) {
+        let name = self.parse_name().unwrap();
+        match name {
+            AstNode::Ident(n) => {
+                self.parse_abstraction(
+                    Def::new(n, None)
+                )
+            }
+            _ => panic!()
+        }
     }
 
-    fn parse_abstraction(&mut self) -> ParserResult {
-        todo!()
+    fn parse_abstraction(&mut self, mut def: Def) -> (Def, AstNode) {
+        if self.expect_type(T![=]) {
+            self.consume(&T![=]);
+            let expr = self.parse_expr().unwrap();
+            (def, expr)
+        } else {
+            match self.parse_name().unwrap() {
+                AstNode::Ident(name) => def.add_new_parameter(&name),
+                _ => panic!()
+            }
+            self.parse_abstraction(def)
+        }
     }
 
     pub fn parse_expr(&mut self) -> ParserResult {
-        self.parse_condexpr()
+        let cond_expr = self.parse_condexpr()?;
+        let expr1 = self.parse_expr1()?;
+        match expr1 {
+            AstNode::Empty => Ok(cond_expr),
+            AstNode::Where(None, defs, rhs) => {
+                Ok(AstNode::Where(Some(Box::new(cond_expr)), defs, rhs))
+            }
+            _ => Ok(AstNode::Empty)
+        }
     }
 
     fn parse_expr1(&mut self) -> ParserResult {
-        todo!();
+        if self.expect_type(T![where]) {
+            let pos = self.consume(&T![where]).pos;
+            let defs = self.parse_defs();
+            let where_expr = self.parse_expr1()?;
+            match where_expr {
+                AstNode::Empty => Ok(AstNode::Where(None, defs, None)),
+                nested_where @ AstNode::Where(None, _, None) => {
+                    Ok(AstNode::Where(None, defs, Some(Box::new(nested_where))))
+                }
+                _ => Err(Box::new(ParseError {pos, msg: "Unexpected error.".to_string()}))
+            }
+        } else {
+            Ok(AstNode::Empty)
+        }
     }
 
     fn parse_condexpr(&mut self) -> ParserResult {
@@ -437,7 +491,6 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
     use crate::frontend::lexer::Lexer;
-    use crate::frontend::token::{Token, Type};
 
     fn parse(input: &str) -> AstNode {
         let mut lx = Lexer::new(input);

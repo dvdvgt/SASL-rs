@@ -61,6 +61,6 @@ pub fn run(src: &str) {
     let expr = parser.parse_expr();
     match expr {
         Err(ref e) => eprintln!("{}", e),
-        Ok(ref ast) => println!("\t{}", ast)
+        Ok(ref ast) => println!("\t{:?}", ast)
     }
 }

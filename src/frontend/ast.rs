@@ -2,12 +2,31 @@
 
 use std::{collections::HashMap, fmt};
 
-use super::{token::Type, utils::Position};
+use super::{token::Type};
 
-#[derive(Debug, Hash, Clone, PartialEq)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Def {
     name: String,
     params: Option<Vec<String>>
+}
+
+impl Def {
+    pub fn new(name: String, params: Option<Vec<String>>) -> Self {
+        Self {
+            name,
+            params
+        }
+    }
+
+    pub fn add_new_parameter(&mut self, param_name: &str) {
+        match self.params {
+            Some(ref mut vec) => vec.push(param_name.to_string()),
+            None => {
+                let vec = vec![param_name.to_string()];
+                self.params = Some(vec)
+            }
+        }
+    }
 }
 
 pub struct Ast {
@@ -19,7 +38,7 @@ pub struct Ast {
 #[derive(Debug, Clone)]
 /// Everything is an expression in SASL.
 pub enum AstNode {
-    Where(Box<AstNode>, HashMap<Def, AstNode>),
+    Where(Option<Box<AstNode>>, HashMap<Def, AstNode>, Option<Box<AstNode>>),
     /// Function application used for currying functions
     App(Box<AstNode>, Box<AstNode>),
     // Variable/function identifier
@@ -37,12 +56,15 @@ impl fmt::Display for AstNode {
         write!(
             f, "{}",
             match self {
-                AstNode::Where(ast, defs) => format!("{} where", ast),
+                AstNode::Where(Some(expr), _, Some(nested_where)) => format!("{} where {}", expr, nested_where),
+                AstNode::Where(Some(expr), _, None) => format!("{} where", expr),
+                AstNode::Where(None, _, None) => format!("where"),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
                 AstNode::Ident(s) => format!("var:{}", s),
                 AstNode::Constant(t) => t.to_string(),
                 AstNode::Builtin(op) => format!("{}", op),
-                AstNode::Empty => "empty".to_string()
+                AstNode::Empty => "empty".to_string(),
+                _ => "unkown".to_string()
             }
         )
     }
