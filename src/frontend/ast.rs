@@ -6,8 +6,8 @@ use super::{token::Type};
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Def {
-    name: String,
-    params: Option<Vec<String>>
+    pub name: String,
+    pub params: Option<Vec<String>>
 }
 
 impl Def {
@@ -29,10 +29,29 @@ impl Def {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Ast {
-    global_defs: HashMap<Def, AstNode>,
+    pub global_defs: HashMap<Def, AstNode>,
     //root: AstNode,
-    body: AstNode,
+    pub body: AstNode,
+}
+
+impl Ast {
+    pub fn new() -> Self {
+        Self {
+            global_defs: HashMap::new(),
+            body: AstNode::Empty
+        }
+    }
+}
+
+impl fmt::Display for Ast {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f, "{} . {}",
+            "defs", self.body
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

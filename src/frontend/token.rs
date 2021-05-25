@@ -99,7 +99,7 @@ impl fmt::Display for Type {
                 Type::Number(x) => format!("Number:{}", x),
                 Type::Boolean(x) => format!("Boolean:{}", x),
                 T![nil] => "nil".to_string(),
-                T![def] => "Def".to_string(),
+                T![def] => "def".to_string(),
                 T![where] => "where".to_string(),
                 T![if] => "if".to_string(),
                 T![then] => "then".to_string(),

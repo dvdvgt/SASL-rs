@@ -4,15 +4,29 @@ use std::{
     io::{self, Read},
 };
 
-use sasl::frontend::lexer::Lexer;
-use sasl::frontend::parser::Parser;
+use clap::{App, Arg};
+
+use sasl::frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    match args.len() {
-        1 => run_prompt(),
-        2 => run_file(&args[1]),
-        _ => panic!("Unsupported number of arguments."),
+    let matches = App::new("SASL-rs")
+        .version("0.0.1")
+        .author("David Voigt <david.voigt@student.uni-tuebingen.de>\nLars Vogtmann <lars.vogtmann@studen.uni-tuebingen.de")
+        .about("SASL compiler written in Rust.")
+        .arg(Arg::new("visualize")
+            .short('v')
+            .long("visualize")
+            .about("Visualizes the abstract syntax tree with the help of GraphViz/DOT and outputs a PDF with the AST.")
+            .takes_value(false))
+        .arg(Arg::new("compile")
+            .value_name("FILE")
+            .short('c')
+            .about("Path to the SASL file that will be compiled.")
+            .takes_value(true)).get_matches();
+
+    match matches.value_of("compile") {
+        Some(x) => run_file(x),
+        None => run_prompt()
     }
 }
 
@@ -58,9 +72,15 @@ pub fn run(src: &str) {
     }
     println!("AST:");
     let mut parser = Parser::new(tokens.unwrap());
-    let expr = parser.parse_expr();
+    let expr = parser.parse();
     match expr {
         Err(ref e) => eprintln!("{}", e),
-        Ok(ref ast) => println!("\t{:?}", ast)
+        Ok(ref ast) => {
+            println!("\t{}", ast);
+            let mut viz = Visualizer::new("g", false);
+            viz.visualize_ast(ast);
+            viz.write_to_pdf("graph.pdf");
+            viz.write_to_dot("graph.dot");
+        }
     }
 }

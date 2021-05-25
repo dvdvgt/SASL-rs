@@ -3,7 +3,7 @@
 use std::collections::{hash_map::HashMap, VecDeque};
 use std::error::Error;
 
-use super::{ast::{AstNode, Op, Def}, utils::Position};
+use super::{ast::{AstNode, Op, Def, Ast}, utils::Position};
 use super::token::{Token, Type};
 use crate::{error::SaslError::{ParseError, self}};
 use crate::T;
@@ -82,6 +82,41 @@ impl<'a> Parser<'a> {
     //--------
     // PARSING
     //--------
+    pub fn parse(&mut self) -> Result<Ast, Box<dyn Error>> {
+        let mut ast = Ast::new();
+        if self.expect_type(T![def]) {
+            self.parse_funcefs(&mut ast.global_defs);
+            if self.expect_type(T![.]) {
+                self.consume(&T![.]);
+                let expr = self.parse_expr()?;
+                ast.body = expr;
+                Ok(ast)
+            } else {
+                let tok = self.next().unwrap();
+                Err(Box::new(ParseError { pos: tok.pos, msg: format!("Expected '.'. Found {} instead.", tok.typ)}))
+            }
+        } else {
+            ast.body = self.parse_expr()?;
+            Ok(ast)
+        }
+    }
+
+    fn parse_funcefs(&mut self, global_defs: &mut Defs) {
+        self.consume(&T![def]);
+        let def = self.parse_def();
+        global_defs.insert(def.0, def.1);
+        self.parse_funcdefs1(global_defs);
+    }
+
+    fn parse_funcdefs1(&mut self, global_defs: &mut Defs) {
+        if self.expect_type(T![def]) {
+            self.next();
+            let def = self.parse_def();
+            global_defs.insert(def.0, def.1);
+            self.parse_funcdefs1(global_defs);
+        }
+    }
+
     fn parse_defs(&mut self) -> Defs {
         let mut defs = HashMap::new();
         let def = self.parse_def();
