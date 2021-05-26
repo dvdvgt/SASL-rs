@@ -9,12 +9,20 @@ use super::{
 use crate::error::SaslError::SyntaxError;
 use crate::T;
 
+/// The lexer struct is responsible for the tokeniziation of the source code.
 pub struct Lexer<'a> {
+    /// Contains the source code. Used for 'cutting' out lexemes for the tokens.
     source: &'a str,
+    /// Peekable iterator over all characters of the source string.
     chars: Peekable<Chars<'a>>,
+    /// Vector where all the tokens are saved.
     tokens: VecDeque<Token<'a>>,
+    /// The current relative position in the source code in repespect to the
+    /// current line i.e. that the column is reset once a line break occurs.
     token_pos: Position,
+    /// The current absolute starting position of a token.
     start_idx: usize,
+    /// The current absolute position in the source code. 
     current_idx: usize,
 }
 
@@ -184,10 +192,17 @@ impl<'a> Lexer<'a> {
         self.advance_while(&|c| c.is_digit(10));
         if self.chars.peek() == Some(&'.') {
             self.advance();
-            if !self.chars.peek().unwrap().is_digit(10) {
+            if let Some(num) = self.chars.peek() {
+                if !num.is_digit(10) {
+                    return Err(Box::new(SyntaxError {
+                        pos: self.token_pos,
+                        msg: "Expected floating point number.".to_string(),
+                    }));
+                }
+            } else {
                 return Err(Box::new(SyntaxError {
                     pos: self.token_pos,
-                    msg: "expected floating point number.".to_string(),
+                    msg: "Expected floating point number.".to_string(),
                 }));
             }
             self.advance_while(&|c| c.is_digit(10))

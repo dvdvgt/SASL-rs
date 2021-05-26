@@ -1,9 +1,12 @@
-//! Abstract syntax tree implementation.
+//! Abstract syntax tree datastructures.
+//! In here are all datastructures needed for creating the AST in the parser.
 
 use std::{collections::HashMap, fmt};
 
 use super::{token::Type};
 
+/// Represents a definition in SASL consisting of a name and
+/// a (optional) number of parameters.
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Def {
     pub name: String,
@@ -29,6 +32,11 @@ impl Def {
     }
 }
 
+/// Represents the whole abstract syntax tree which consists of
+///     - Global definitions stored in a hash map. Each global definition is a
+///     direct child of the root node.
+///     - The body which consists of a single expression which is seperated from
+///     the global definitions by a dot ('.').
 #[derive(Debug, Clone)]
 pub struct Ast {
     pub global_defs: HashMap<Def, AstNode>,
@@ -55,7 +63,12 @@ impl fmt::Display for Ast {
 }
 
 #[derive(Debug, Clone)]
-/// Everything is an expression in SASL.
+/// Basic nodes of which the AST consists.
+///     - Identifiers, constants and builtins are always leave nodes
+///     - App is short for function application and is used for currying functions
+///     - Where is how local definition are defined in SASL
+///     - Empty represents an empty expression which is used throughout the parser
+///     implementation but never actually stored in the AST.
 pub enum AstNode {
     Where(Option<Box<AstNode>>, HashMap<Def, AstNode>, Option<Box<AstNode>>),
     /// Function application used for currying functions
@@ -79,7 +92,7 @@ impl fmt::Display for AstNode {
                 AstNode::Where(Some(expr), _, None) => format!("{} where", expr),
                 AstNode::Where(None, _, None) => format!("where"),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
-                AstNode::Ident(s) => format!("var:{}", s),
+                AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
                 AstNode::Builtin(op) => format!("{}", op),
                 AstNode::Empty => "empty".to_string(),
@@ -89,6 +102,10 @@ impl fmt::Display for AstNode {
     }
 }
 
+/// Different types of operations. In SASL there are three types:
+///     - Prefix operations like -, not
+///     - Infox operations like all arthimetic operations
+///     - The ternary operator: if a then b else c
 #[derive(Debug, PartialEq, Clone)]
 pub enum Op {
     PrefixOp(Type),

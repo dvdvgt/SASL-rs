@@ -68,24 +68,26 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn throw_parse_err(self, token: Token<'a>, err: &str) -> SaslError {
-        ParseError {
-            pos: token.pos,
-            msg: format!("{}. Found {}:{}", err, token.typ, token.lexeme)
-        }
-    }
-
-    fn merge_defs(map1: & Defs, map2: &Defs) -> Defs {
-        todo!()
+    /// Create a parse error with a custom error message.
+    fn throw_parse_err(&self, token: Token<'a>, err: &str) -> Box<dyn Error> {
+        Box::new(
+            ParseError {
+                    pos: token.pos,
+                    msg: format!("{}. Found {}:{} instead.", err, token.typ, token.lexeme)
+            }
+        )
     }
 
     //--------
     // PARSING
     //--------
+
+    /// Parse the given tokens into a AST.
+    /// Corresponds to the <system> non-terminal in the grammar rules.
     pub fn parse(&mut self) -> Result<Ast, Box<dyn Error>> {
         let mut ast = Ast::new();
         if self.expect_type(T![def]) {
-            self.parse_funcefs(&mut ast.global_defs);
+            self.parse_funcdefs(&mut ast.global_defs);
             if self.expect_type(T![.]) {
                 self.consume(&T![.]);
                 let expr = self.parse_expr()?;
@@ -93,7 +95,7 @@ impl<'a> Parser<'a> {
                 Ok(ast)
             } else {
                 let tok = self.next().unwrap();
-                Err(Box::new(ParseError { pos: tok.pos, msg: format!("Expected '.'. Found {} instead.", tok.typ)}))
+                Err(self.throw_parse_err(tok, "Expected '.'"))
             }
         } else {
             ast.body = self.parse_expr()?;
@@ -101,7 +103,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_funcefs(&mut self, global_defs: &mut Defs) {
+    fn parse_funcdefs(&mut self, global_defs: &mut Defs) {
         self.consume(&T![def]);
         let def = self.parse_def();
         global_defs.insert(def.0, def.1);
@@ -527,19 +529,65 @@ mod tests {
     use super::*;
     use crate::frontend::lexer::Lexer;
 
-    fn parse(input: &str) -> AstNode {
+    fn parse_expr(input: &str) -> AstNode {
         let mut lx = Lexer::new(input);
         let tokens = lx.tokenize().unwrap().clone();
         let mut parser = Parser::new(tokens);
         parser.parse_expr().unwrap()
     }
 
+    fn parse_def(input: &str, defs: &mut Defs) {
+        let mut lx = Lexer::new(input);
+        let tokens = lx.tokenize().unwrap().clone();
+        let mut parser = Parser::new(tokens);
+        parser.parse_funcdefs(defs)
+    }
+
     #[test]
-    fn parse_basic_epxr() {
-        let expr = parse("[1,2,\"ab\", true, 5.6, id]");
+    fn test_parse_basic_epxr() {
+        let expr = parse_expr("[1,2,\"ab\", true, 5.6, id]");
         assert_eq!(
             expr.to_string(), 
-            "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ var:id) @ nil))))))"
+            "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ Id:id) @ nil))))))"
+        );
+        let expr = parse_expr("1.2 + 2 * 3 - 4 / 5");
+        assert_eq!(
+            expr.to_string(),
+            "((- @ ((+ @ Number:1.2) @ ((* @ Number:2) @ Number:3))) @ ((/ @ Number:4) @ Number:5))"
+        );
+        let expr = parse_expr("if [1,true,\"a\"] = nil then 1.5 else -2.5");
+        assert_eq!(
+            expr.to_string(),
+            "(((cond @ ((= @ ((: @ Number:1) @ ((: @ Boolean:true) @ ((: @ String:a) @ nil)))) @ nil)) @ Number:1.5) @ (- @ Number:2.5))"
+        )
+    }
+
+    #[test]
+    fn test_parse_def() {
+        let mut defs = HashMap::new();
+        parse_def("def a = 5 + 2\ndef b x = -2.3 * x\ndef plus x y z = x + y + z", &mut defs);
+
+        assert_eq!(defs.len(), 3);
+
+        let def = &Def { name: "a".to_string(), params: None };
+        let astnode = defs.get(def).unwrap();
+        assert_eq!(
+            astnode.to_string(),
+            "((+ @ Number:5) @ Number:2)"
+        );
+        
+        let def = &Def { name: "b".to_string(), params: Some(vec!["x".to_string()]) };
+        let astnode = defs.get(def).unwrap();
+        assert_eq!(
+            astnode.to_string(),
+            "((* @ (- @ Number:2.3)) @ Id:x)"
+        );
+
+        let def = &Def { name: "plus".to_string(), params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()])};
+        let astnode = defs.get(def).unwrap();
+        assert_eq!(
+            astnode.to_string(),
+            "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)"
         );
     }
 }

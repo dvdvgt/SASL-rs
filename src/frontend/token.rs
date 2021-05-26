@@ -1,9 +1,13 @@
+//! Datastructures needed for representing tokens.
+
 use phf::phf_map;
 use std::fmt;
 
 use super::utils::Position;
 use crate::T;
 
+/// A token is grouping of single characters (lexeme) with a certain type and
+/// a relative position in the source code.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub typ: Type,
@@ -42,6 +46,7 @@ impl<'a> fmt::Display for Token<'a> {
     }
 }
 
+/// All the different token types in SASL.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     // Literals
@@ -135,6 +140,8 @@ impl fmt::Display for Type {
     }
 }
 
+/// Hashmap with all keywords in SASL used for differentiating between 
+/// keywords and identifiers.
 static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
     "hd" => Type::Head,
     "tl" => Type::Tail,
@@ -151,6 +158,11 @@ static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
     "false" => Type::Boolean(false)
 };
 
+/// Macro for conveniently accessing the different token types without having to write them out.
+/// # Example
+/// ```rust
+/// assert_eq!(crate::frontend::token::Type::Plus, T![+])
+/// ```
 #[macro_export]
 macro_rules! T {
     [+] => {
