@@ -1,8 +1,7 @@
 def fibs = 1 : 1 : next fibs
     where
-        next xs = ((hd xs) + (scnd xs)) : (next (tl xs))
-            where
-                scnd ys = hd (tl ys)
+        next xs = ((hd xs) + (scnd xs)) : (next (tl xs));
+            scnd ys = hd (tl ys)
 def take n xs = 
     if n = 0 then nil 
     else x : take (n - 1) ys

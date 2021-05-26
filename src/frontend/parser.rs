@@ -73,7 +73,7 @@ impl<'a> Parser<'a> {
         Box::new(
             ParseError {
                     pos: token.pos,
-                    msg: format!("{}. Found {}:{} instead.", err, token.typ, token.lexeme)
+                    msg: format!("{} Found {}:{} instead.", err, token.typ, token.lexeme)
             }
         )
     }
@@ -95,7 +95,7 @@ impl<'a> Parser<'a> {
                 Ok(ast)
             } else {
                 let tok = self.next().unwrap();
-                Err(self.throw_parse_err(tok, "Expected '.'"))
+                Err(self.throw_parse_err(tok, "Expected '.'."))
             }
         } else {
             ast.body = self.parse_expr()?;
@@ -378,7 +378,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected identifier, hd, tl, constand or grouped expression but found {}.", token.typ)}))
+                Err(self.throw_parse_err(token, "Expected identifier, hd, tl, constand or grouped expression."))
             }
         }
     }
@@ -391,7 +391,7 @@ impl<'a> Parser<'a> {
             Ok(AstNode::Ident(id_name))
         } else {
             let token = self.next().unwrap();
-            Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected identifier but found {}.", token.typ)}))
+            Err(self.throw_parse_err(token, "Expected identifier."))
         }
     }
 
@@ -403,7 +403,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected hd (head) or tl (tail) call but found {}.", token.typ)}))
+                Err(self.throw_parse_err(token, "Expected hd (head) or tl (tail) call."))
             }
         }
     }
@@ -418,7 +418,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected constant/literal but found {}.", token.typ)}))
+                Err(self.throw_parse_err(token, "Expected constant/literal."))
             }
         }
     }
@@ -438,7 +438,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         let token = self.next().unwrap();
-                        Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected ']' but found {}.", token.typ)}))
+                        Err(self.throw_parse_err(token, "Expected ']'."))
                     }
                 }
             }
