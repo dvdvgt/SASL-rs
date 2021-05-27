@@ -231,7 +231,7 @@ impl<'a> Lexer<'a> {
         if self.is_at_end() {
             return Err(Box::new(SyntaxError {
                 pos: self.token_pos,
-                msg: "missing clossing \".".to_string(),
+                msg: "missing closing \".".to_string(),
             }));
         }
         // Advance over "

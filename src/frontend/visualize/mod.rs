@@ -82,19 +82,19 @@ impl Visualizer {
                 self.add_edge(&where_id, &lhs_id);
                 self.visualize_ast_nodes(lhs_expr);
 
-                self.add_definition(where_id.clone(), defs.iter());
+                self.add_definition(where_id, defs.iter());
 
             }
             // Constants
             AstNode::Constant(Type::String(x)) => self.add_node(format!("String:{}", x)),
             AstNode::Constant(Type::Number(x)) => self.add_node(format!("Num:{}", x)),
             AstNode::Constant(Type::Boolean(x)) => self.add_node(format!("Bool:{}", x)),
-            AstNode::Constant(Type::Nil) => self.add_node(format!("nil")),
+            AstNode::Constant(Type::Nil) => self.add_node("nil".to_string()),
             // Operator
             AstNode::Builtin(Op::InfixOp(op)) | AstNode::Builtin(Op::PrefixOp(op)) => {
                 self.add_node(format!("{}", op))
             }
-            AstNode::Builtin(Op::Cond) => self.add_node(format!("cond")),
+            AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
@@ -143,7 +143,7 @@ impl Visualizer {
             .spawn().expect("Unable to create AST visualization. Graphviz is probably not installed");
 
         let mut stdin = dot.stdin.take().expect("Failed to write to stdin");
-        stdin.write(buf.as_bytes()).unwrap();
+        stdin.write_all(buf.as_bytes()).unwrap();
     }
 
     pub fn write_to_dot(&self, outfile: &str) {

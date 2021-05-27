@@ -3,9 +3,9 @@
 use std::collections::{hash_map::HashMap, VecDeque};
 use std::error::Error;
 
-use super::{ast::{AstNode, Op, Def, Ast}, utils::Position};
+use super::{ast::{AstNode, Op, Def, Ast}};
 use super::token::{Token, Type};
-use crate::{error::SaslError::{ParseError, self}};
+use crate::{error::SaslError::{ParseError}};
 use crate::T;
 
 pub struct Parser<'a> {
@@ -69,11 +69,21 @@ impl<'a> Parser<'a> {
     }
 
     /// Create a parse error with a custom error message.
-    fn throw_parse_err(&self, token: Token<'a>, err: &str) -> Box<dyn Error> {
+    fn token_parse_err(&self, token: Token<'a>, err: &str) -> Box<dyn Error> {
         Box::new(
             ParseError {
                     pos: token.pos,
                     msg: format!("{} Found {}:{} instead.", err, token.typ, token.lexeme)
+            }
+        )
+    }
+
+    fn parse_err(&mut self, err: &str) -> Box<dyn Error> {
+        let token = self.next().unwrap();
+        Box::new(
+            ParseError {
+                pos: token.pos,
+                msg: err.to_string()
             }
         )
     }
@@ -87,7 +97,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Ast, Box<dyn Error>> {
         let mut ast = Ast::new();
         if self.expect_type(T![def]) {
-            self.parse_funcdefs(&mut ast.global_defs);
+            self.parse_funcdefs(&mut ast.global_defs)?;
             if self.expect_type(T![.]) {
                 self.consume(&T![.]);
                 let expr = self.parse_expr()?;
@@ -95,7 +105,7 @@ impl<'a> Parser<'a> {
                 Ok(ast)
             } else {
                 let tok = self.next().unwrap();
-                Err(self.throw_parse_err(tok, "Expected '.'."))
+                Err(self.token_parse_err(tok, "Expected '.'."))
             }
         } else {
             ast.body = self.parse_expr()?;
@@ -103,50 +113,49 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_funcdefs(&mut self, global_defs: &mut Defs) {
+    fn parse_funcdefs(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         self.consume(&T![def]);
-        let def = self.parse_def();
+        let def = self.parse_def()?;
         global_defs.insert(def.0, def.1);
-        self.parse_funcdefs1(global_defs);
+        self.parse_funcdefs1(global_defs)?;
+        Ok(())
     }
 
-    fn parse_funcdefs1(&mut self, global_defs: &mut Defs) {
+    fn parse_funcdefs1(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         if self.expect_type(T![def]) {
             self.next();
-            let def = self.parse_def();
+            let def = self.parse_def()?;
             global_defs.insert(def.0, def.1);
-            self.parse_funcdefs1(global_defs);
+            self.parse_funcdefs1(global_defs)
+        } else {
+            Ok(())
         }
     }
 
-    fn parse_defs(&mut self) -> Defs {
+    fn parse_defs(&mut self) -> Result<Defs, Box<dyn Error>> {
         let mut defs = HashMap::new();
-        let def = self.parse_def();
+        let def = self.parse_def()?;
         defs.insert(def.0, def.1);
-        self.parse_defs1(&mut defs);
-        defs
+        self.parse_defs1(&mut defs)?;
+        Ok(defs)
     }
 
-    fn parse_defs1(&mut self, defs: &mut Defs) {
+    fn parse_defs1(&mut self, defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         if self.expect_type(T![;]) {
             self.consume(&T![;]);
-            let def = self.parse_def();
+            let def = self.parse_def()?;
             defs.insert(def.0, def.1);
-            self.parse_defs1(defs);
+            self.parse_defs1(defs)
         } else {
-            return
+            Ok(())
         }
     }
 
-    fn parse_def(&mut self) -> (Def, AstNode) {
-        let name = self.parse_name().unwrap();
+    fn parse_def(&mut self) -> Result<(Def, AstNode), Box<dyn Error>> {
+        let name = self.parse_name()?;
         match name {
-            AstNode::Ident(n) => {
-                self.parse_abstraction(
-                    Def::new(n, None)
-                )
-            }
-            _ => panic!()
+            AstNode::Ident(n) => Ok(self.parse_abstraction(Def::new(n, None))),
+            _ => Err(self.parse_err("Expected identifier for definition."))
         }
     }
 
@@ -179,7 +188,7 @@ impl<'a> Parser<'a> {
     fn parse_expr1(&mut self) -> ParserResult {
         if self.expect_type(T![where]) {
             let pos = self.consume(&T![where]).pos;
-            let defs = self.parse_defs();
+            let defs = self.parse_defs()?;
             let where_expr = self.parse_expr1()?;
             match where_expr {
                 AstNode::Empty => Ok(AstNode::Where(None, defs, None)),
@@ -378,7 +387,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(self.throw_parse_err(token, "Expected identifier, hd, tl, constand or grouped expression."))
+                Err(self.token_parse_err(token, "Expected identifier, hd, tl, constant or grouped expression."))
             }
         }
     }
@@ -391,7 +400,7 @@ impl<'a> Parser<'a> {
             Ok(AstNode::Ident(id_name))
         } else {
             let token = self.next().unwrap();
-            Err(self.throw_parse_err(token, "Expected identifier."))
+            Err(self.token_parse_err(token, "Expected identifier."))
         }
     }
 
@@ -403,7 +412,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(self.throw_parse_err(token, "Expected hd (head) or tl (tail) call."))
+                Err(self.token_parse_err(token, "Expected hd (head) or tl (tail) call."))
             }
         }
     }
@@ -418,7 +427,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(self.throw_parse_err(token, "Expected constant/literal."))
+                Err(self.token_parse_err(token, "Expected constant/literal."))
             }
         }
     }
@@ -438,7 +447,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         let token = self.next().unwrap();
-                        Err(self.throw_parse_err(token, "Expected ']'."))
+                        Err(self.token_parse_err(token, "Expected ']'."))
                     }
                 }
             }
@@ -540,7 +549,7 @@ mod tests {
         let mut lx = Lexer::new(input);
         let tokens = lx.tokenize().unwrap().clone();
         let mut parser = Parser::new(tokens);
-        parser.parse_funcdefs(defs)
+        parser.parse_funcdefs(defs).unwrap()
     }
 
     #[test]

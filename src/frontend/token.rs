@@ -33,10 +33,7 @@ impl<'a> Token<'a> {
     }
 
     pub fn get_keyword(key: &str) -> Option<Type> {
-        match KEYWORDS.get(key) {
-            Some(tok) => Some(tok.clone()),
-            _ => None,
-        }
+        KEYWORDS.get(key).cloned()
     }
 }
 
@@ -161,7 +158,8 @@ static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
 /// Macro for conveniently accessing the different token types without having to write them out.
 /// # Example
 /// ```rust
-/// assert_eq!(crate::frontend::token::Type::Plus, T![+])
+/// use sasl::{T, frontend::token::Type};
+/// assert_eq!(Type::Plus, T![+])
 /// ```
 #[macro_export]
 macro_rules! T {

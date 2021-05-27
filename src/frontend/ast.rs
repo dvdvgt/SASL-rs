@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, fmt};
 
-use super::{token::Type};
+use super::token::Type;
 
 /// Represents a definition in SASL consisting of a name and
 /// a (optional) number of parameters.
@@ -62,6 +62,12 @@ impl fmt::Display for Ast {
     }
 }
 
+impl Default for Ast {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Basic nodes of which the AST consists.
 ///     - Identifiers, constants and builtins are always leave nodes
@@ -90,11 +96,11 @@ impl fmt::Display for AstNode {
             match self {
                 AstNode::Where(Some(expr), _, Some(nested_where)) => format!("{} where {}", expr, nested_where),
                 AstNode::Where(Some(expr), _, None) => format!("{} where", expr),
-                AstNode::Where(None, _, None) => format!("where"),
+                AstNode::Where(None, _, None) => "where".to_string(),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
-                AstNode::Builtin(op) => format!("{}", op),
+                AstNode::Builtin(op) => op.to_string(),
                 AstNode::Empty => "empty".to_string(),
                 _ => "unkown".to_string()
             }

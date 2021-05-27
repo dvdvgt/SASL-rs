@@ -59,7 +59,7 @@ impl Node {
     pub fn new(id: &str, label: Option<&str>) -> Self {
         Self {
             id: id.to_string(),
-            label: label.map_or(None, |x| Some(x.to_string()))
+            label: label.map(|x| x.to_string())
         }
     }
 }
