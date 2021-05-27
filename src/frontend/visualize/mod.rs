@@ -1,5 +1,5 @@
 use super::visualize::graph::{Graph, Edge, Node};
-use super::ast::{AstNode, Op, Ast, Def};
+use super::ast::{AstNode, Op, Ast};
 use crate::frontend::token::Type;
 
 use std::{process::{Command, Stdio}, io::Write, fs::File};
@@ -32,11 +32,11 @@ impl Visualizer {
 
     /// Add definitions to the graph with a given definition root and a hash map iterator
     /// with all definitions.
-    fn add_definition(&mut self, def_root_id: String, defs: hash_map::Iter<'_, Def, AstNode>) {
-        for (def, ast_node) in defs {
-            let mut def_name = def.name.clone();
+    fn add_definition(&mut self, def_root_id: String, defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNode)>) {
+        for (def, (params, ast_node)) in defs {
+            let mut def_name = def.clone();
             // Add param names to definition node name.
-            match def.params {
+            match params {
                 Some(ref params) => {
                     for param_name in params {
                         def_name += " ";

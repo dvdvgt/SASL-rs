@@ -9,8 +9,8 @@ use super::token::Type;
 /// a (optional) number of parameters.
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Def {
-    pub name: String,
-    pub params: Option<Vec<String>>
+    pub name: Identifier,
+    pub params: Params
 }
 
 impl Def {
@@ -21,6 +21,7 @@ impl Def {
         }
     }
 
+    /// Add a new parameter name to the definition.
     pub fn add_new_parameter(&mut self, param_name: &str) {
         match self.params {
             Some(ref mut vec) => vec.push(param_name.to_string()),
@@ -32,14 +33,25 @@ impl Def {
     }
 }
 
+/// A vector of identifiers (strings) which may or may not exist depending on the
+/// type of definition. A constant definition does not have any parameters whereas
+/// a function definition has at least one parameter.
+/// # Example
+/// `def f x y` has the `Params` `Some(vec!["x".to_string(), "y".to_string()])`
+pub type Params = Option<Vec<Identifier>>;
+
+/// An identifier is a string representing the name of either constant or function
+/// name.
+pub type Identifier = String;
+
 /// Represents the whole abstract syntax tree which consists of
 ///     - Global definitions stored in a hash map. Each global definition is a
 ///     direct child of the root node.
 ///     - The body which consists of a single expression which is seperated from
-///     the global definitions by a dot ('.').
+///     the global definitions by a dot ('.') in the source code.
 #[derive(Debug, Clone)]
 pub struct Ast {
-    pub global_defs: HashMap<Def, AstNode>,
+    pub global_defs: HashMap<Identifier, (Params, AstNode)>,
     //root: AstNode,
     pub body: AstNode,
 }
@@ -51,6 +63,10 @@ impl Ast {
             body: AstNode::Empty
         }
     }
+
+    pub fn lookup(&self, def: &str) -> Option<&(Params, AstNode)> {
+        self.global_defs.get(def)
+    } 
 }
 
 impl fmt::Display for Ast {
@@ -68,15 +84,15 @@ impl Default for Ast {
     }
 }
 
-#[derive(Debug, Clone)]
 /// Basic nodes of which the AST consists.
 ///     - Identifiers, constants and builtins are always leave nodes
 ///     - App is short for function application and is used for currying functions
 ///     - Where is how local definition are defined in SASL
 ///     - Empty represents an empty expression which is used throughout the parser
 ///     implementation but never actually stored in the AST.
+#[derive(Debug, Clone)]
 pub enum AstNode {
-    Where(Option<Box<AstNode>>, HashMap<Def, AstNode>, Option<Box<AstNode>>),
+    Where(Option<Box<AstNode>>, HashMap<Identifier, (Params, AstNode)>, Option<Box<AstNode>>),
     /// Function application used for currying functions
     App(Box<AstNode>, Box<AstNode>),
     // Variable/function identifier

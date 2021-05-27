@@ -1,21 +1,27 @@
-//! Recursive descent parser implementation
+//! Recursive descent parser implementation.
 
 use std::collections::{hash_map::HashMap, VecDeque};
 use std::error::Error;
 
-use super::{ast::{AstNode, Op, Def, Ast}};
-use super::token::{Token, Type};
-use crate::{error::SaslError::{ParseError}};
-use crate::T;
+use super::{ast::{AstNode, Op, Def, Ast, Params, Identifier}, token::{Token, Type}};
+use crate::{T, error::SaslError::ParseError};
 
+/// The `Parser` struct is repsonsible for parsing a vector tokens to the intermediate AST
+/// representation
 pub struct Parser<'a> {
     tokens: VecDeque<Token<'a>>,
 }
 
+/// Represents the result of most parser functions where either a AstNode is returned or
+/// a parse error occured and Err is returned. 
 type ParserResult = Result<AstNode, Box<dyn Error>>;
-type Defs = HashMap<Def, AstNode>;
+
+/// Defs is a hashmap where each entry is a mapping of an identifier (constant or function name)
+/// to the corresponding vector of optional parameter names and the constant/function body.
+type Defs = HashMap<Identifier, (Params, AstNode)>;
 
 impl<'a> Parser<'a> {
+
     pub fn new(tokens: VecDeque<Token<'a>>) -> Self {
         Self { tokens }
     }
@@ -115,8 +121,8 @@ impl<'a> Parser<'a> {
 
     fn parse_funcdefs(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         self.consume(&T![def]);
-        let def = self.parse_def()?;
-        global_defs.insert(def.0, def.1);
+        let (Def { name, params}, ast) = self.parse_def()?;
+        global_defs.insert(name, (params, ast));
         self.parse_funcdefs1(global_defs)?;
         Ok(())
     }
@@ -124,8 +130,8 @@ impl<'a> Parser<'a> {
     fn parse_funcdefs1(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         if self.expect_type(T![def]) {
             self.next();
-            let def = self.parse_def()?;
-            global_defs.insert(def.0, def.1);
+            let (Def { name, params}, ast) = self.parse_def()?;
+            global_defs.insert(name, (params, ast));
             self.parse_funcdefs1(global_defs)
         } else {
             Ok(())
@@ -134,8 +140,8 @@ impl<'a> Parser<'a> {
 
     fn parse_defs(&mut self) -> Result<Defs, Box<dyn Error>> {
         let mut defs = HashMap::new();
-        let def = self.parse_def()?;
-        defs.insert(def.0, def.1);
+        let (Def { name, params}, ast) = self.parse_def()?;
+        defs.insert(name, (params, ast));
         self.parse_defs1(&mut defs)?;
         Ok(defs)
     }
@@ -143,8 +149,8 @@ impl<'a> Parser<'a> {
     fn parse_defs1(&mut self, defs: &mut Defs) -> Result<(), Box<dyn Error>> {
         if self.expect_type(T![;]) {
             self.consume(&T![;]);
-            let def = self.parse_def()?;
-            defs.insert(def.0, def.1);
+            let (Def { name, params}, ast) = self.parse_def()?;
+            defs.insert(name, (params, ast));
             self.parse_defs1(defs)
         } else {
             Ok(())
@@ -154,20 +160,19 @@ impl<'a> Parser<'a> {
     fn parse_def(&mut self) -> Result<(Def, AstNode), Box<dyn Error>> {
         let name = self.parse_name()?;
         match name {
-            AstNode::Ident(n) => Ok(self.parse_abstraction(Def::new(n, None))),
+            AstNode::Ident(n) => Ok(self.parse_abstraction(Def::new(n, None))?),
             _ => Err(self.parse_err("Expected identifier for definition."))
         }
     }
-
-    fn parse_abstraction(&mut self, mut def: Def) -> (Def, AstNode) {
+    // TODO add error handling!!!
+    fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, AstNode), Box<dyn Error>> {
         if self.expect_type(T![=]) {
             self.consume(&T![=]);
             let expr = self.parse_expr().unwrap();
-            (def, expr)
+            Ok((def, expr))
         } else {
-            match self.parse_name().unwrap() {
-                AstNode::Ident(name) => def.add_new_parameter(&name),
-                _ => panic!()
+            if let AstNode::Ident(name) = self.parse_name()? {
+                def.add_new_parameter(&name);
             }
             self.parse_abstraction(def)
         }
@@ -579,21 +584,21 @@ mod tests {
         assert_eq!(defs.len(), 3);
 
         let def = &Def { name: "a".to_string(), params: None };
-        let astnode = defs.get(def).unwrap();
+        let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
             astnode.to_string(),
             "((+ @ Number:5) @ Number:2)"
         );
         
         let def = &Def { name: "b".to_string(), params: Some(vec!["x".to_string()]) };
-        let astnode = defs.get(def).unwrap();
+        let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
             astnode.to_string(),
             "((* @ (- @ Number:2.3)) @ Id:x)"
         );
 
         let def = &Def { name: "plus".to_string(), params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()])};
-        let astnode = defs.get(def).unwrap();
+        let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
             astnode.to_string(),
             "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)"
