@@ -6,7 +6,7 @@ use crate::frontend::utils::Position;
 pub enum SaslError {
     SyntaxError { pos: Position, msg: String },
     ParseError { pos: Position, msg: String },
-    CompilerError { msg: String }
+    CompilerError { msg: String },
 }
 
 impl Display for SaslError {
@@ -14,7 +14,7 @@ impl Display for SaslError {
         match self {
             SaslError::SyntaxError { pos, msg } => write!(f, "Syntax error at {}: {}", pos, msg),
             SaslError::ParseError { pos, msg } => write!(f, "Parse error at {}: {}", pos, msg),
-            SaslError::CompilerError { msg } => write!(f, "Compilation error: {}", msg)
+            SaslError::CompilerError { msg } => write!(f, "Compilation error: {}", msg),
         }
     }
 }
@@ -24,7 +24,7 @@ impl Error for SaslError {
         match self {
             SaslError::SyntaxError { pos: _, msg } => msg,
             SaslError::ParseError { pos: _, msg } => msg,
-            SaslError::CompilerError { msg } => msg
+            SaslError::CompilerError { msg } => msg,
         }
     }
 }

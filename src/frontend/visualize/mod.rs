@@ -1,9 +1,13 @@
-use super::visualize::graph::{Graph, Edge, Node};
-use super::ast::{AstNode, Op, Ast};
+use super::ast::{Ast, AstNode, Op};
+use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;
 
-use std::{process::{Command, Stdio}, io::Write, fs::File};
 use std::collections::hash_map;
+use std::{
+    fs::File,
+    io::Write,
+    process::{Command, Stdio},
+};
 
 pub mod graph;
 
@@ -11,9 +15,8 @@ pub struct Visualizer {
     /// Counter used for giving each node a unique name.
     node_counter: u32,
     /// Graph that will be filled.
-    pub graph: Graph
+    pub graph: Graph,
 }
-
 
 impl Visualizer {
     const NODE_NAME_PREFIX: &'static str = "node";
@@ -21,7 +24,7 @@ impl Visualizer {
     pub fn new(graph_name: &str, is_directed: bool) -> Self {
         Self {
             node_counter: 1,
-            graph: Graph::new(graph_name, is_directed)
+            graph: Graph::new(graph_name, is_directed),
         }
     }
 
@@ -32,7 +35,11 @@ impl Visualizer {
 
     /// Add definitions to the graph with a given definition root and a hash map iterator
     /// with all definitions.
-    fn add_definition(&mut self, def_root_id: String, defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNode)>) {
+    fn add_definition(
+        &mut self,
+        def_root_id: String,
+        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNode)>,
+    ) {
         for (def, (params, ast_node)) in defs {
             let mut def_name = def.clone();
             // Add param names to definition node name.
@@ -43,7 +50,7 @@ impl Visualizer {
                         def_name += param_name;
                     }
                 }
-                None => ()
+                None => (),
             }
             // Add node for definition and edge from definition to the
             // corresponding AST.
@@ -54,7 +61,7 @@ impl Visualizer {
             // Add Edge from root to each definition
             self.add_edge(&def_root_id, &def_id);
             // Visualize the expression body of the definition
-            self.visualize_ast_nodes(ast_node);            
+            self.visualize_ast_nodes(ast_node);
         }
     }
 
@@ -83,7 +90,6 @@ impl Visualizer {
                 self.visualize_ast_nodes(lhs_expr);
 
                 self.add_definition(where_id, defs.iter());
-
             }
             // Constants
             AstNode::Constant(Type::String(x)) => self.add_node(format!("String:{}", x)),
@@ -95,6 +101,8 @@ impl Visualizer {
                 self.add_node(format!("{}", op))
             }
             AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
+            // Combinators
+            AstNode::S | AstNode::K | AstNode::I => self.add_node(nodes.to_string()),
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
@@ -108,7 +116,7 @@ impl Visualizer {
                 self.add_edge(&node_name, &rhs_name);
                 self.visualize_ast_nodes(rhs);
             }
-            _ => ()
+            _ => (),
         };
     }
 
@@ -121,13 +129,8 @@ impl Visualizer {
     }
 
     fn add_edge(&mut self, id1: &str, id2: &str) {
-        self.graph.add_edge(
-            Edge::new(
-                id1,
-                id2,
-                self.graph.is_directed
-            )
-        )
+        self.graph
+            .add_edge(Edge::new(id1, id2, self.graph.is_directed))
     }
 
     /// Outputs the created graph to a pdf at a given path.
@@ -140,7 +143,8 @@ impl Visualizer {
             .stdin(Stdio::piped())
             .arg("-Tpdf")
             .arg(format!("-o {}", outfile))
-            .spawn().expect("Unable to create AST visualization. Graphviz is probably not installed");
+            .spawn()
+            .expect("Unable to create AST visualization. Graphviz is probably not installed");
 
         let mut stdin = dot.stdin.take().expect("Failed to write to stdin");
         stdin.write_all(buf.as_bytes()).unwrap();
@@ -150,7 +154,8 @@ impl Visualizer {
         let mut file = File::create(outfile).expect("Could not create .dot file.");
         let mut buf = String::new();
         self.graph.as_dot(&mut buf).unwrap();
-        file.write_all(buf.as_bytes()).expect("Error writing to .dot file.");
+        file.write_all(buf.as_bytes())
+            .expect("Error writing to .dot file.");
     }
 }
 

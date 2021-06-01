@@ -6,7 +6,7 @@ pub struct Graph {
     name: String,
     pub is_directed: bool,
     nodes: Vec<Node>,
-    edges: Vec<Edge>
+    edges: Vec<Edge>,
 }
 
 impl Graph {
@@ -15,7 +15,7 @@ impl Graph {
             name: name.to_string(),
             is_directed,
             nodes: Vec::new(),
-            edges: Vec::new()
+            edges: Vec::new(),
         }
     }
 
@@ -34,11 +34,7 @@ impl Graph {
 
 impl Display for Graph {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let graph_type = if self.is_directed {
-            "digraph"
-        } else {
-            "graph"
-        };
+        let graph_type = if self.is_directed { "digraph" } else { "graph" };
         writeln!(f, "{} {} {{", graph_type, &self.name)?;
         for node in self.nodes.iter() {
             writeln!(f, "\t{}", node)?;
@@ -59,7 +55,7 @@ impl Node {
     pub fn new(id: &str, label: Option<&str>) -> Self {
         Self {
             id: id.to_string(),
-            label: label.map(|x| x.to_string())
+            label: label.map(|x| x.to_string()),
         }
     }
 }
@@ -68,7 +64,7 @@ impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.label {
             Some(ref l) => write!(f, "{} [ label=\"{}\" ];", self.id, l),
-            None => write!(f, "{};", self.id)
+            None => write!(f, "{};", self.id),
         }
     }
 }
@@ -112,19 +108,25 @@ macro_rules! add_edges {
 pub struct Edge {
     from: String,
     to: String,
-    is_directed: bool
+    is_directed: bool,
 }
 
 impl Edge {
     pub fn new(from: &str, to: &str, is_directed: bool) -> Self {
-        Self { from: from.to_string(), to: to.to_string(), is_directed }
+        Self {
+            from: from.to_string(),
+            to: to.to_string(),
+            is_directed,
+        }
     }
 }
 
 impl Display for Edge {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
-            f, "{} {} {};", self.from, 
+            f,
+            "{} {} {};",
+            self.from,
             if self.is_directed {
                 "->".to_string()
             } else {
@@ -137,9 +139,9 @@ impl Display for Edge {
 
 #[cfg(test)]
 mod test {
-    use super::{Graph, Edge, Node};
-    use crate::add_nodes;
+    use super::{Edge, Graph, Node};
     use crate::add_edges;
+    use crate::add_nodes;
 
     #[test]
     fn test_empty_graph() {
@@ -186,9 +188,9 @@ mod test {
         );
         add_edges!(
             graph,
-            "node1" -- "node1",
-            "node1" -- "node2",
-            "node3" -- "node1"
+            "node1" - -"node1",
+            "node1" - -"node2",
+            "node3" - -"node1"
         );
         graph.as_dot(&mut buf).unwrap();
         assert_eq!(

@@ -1,5 +1,8 @@
 use io::Write;
-use std::{fs, io::{self, Read}};
+use std::{
+    fs,
+    io::{self, Read},
+};
 
 use clap::{App, Arg, ArgMatches};
 
@@ -28,7 +31,7 @@ fn main() {
 
     match matches.value_of("compile") {
         Some(x) => run_file(x, &matches),
-        None => run_prompt(&matches)
+        None => run_prompt(&matches),
     }
 }
 
@@ -67,12 +70,9 @@ pub fn run(src: &str, args: &ArgMatches) {
         match tokens {
             Err(ref e) => {
                 eprintln!("{}", e);
-                return
+                return;
             }
-            Ok(ref tokens) => {
-                tokens.iter()
-                    .for_each(|token| println!("\t{}", token))
-            }
+            Ok(ref tokens) => tokens.iter().for_each(|token| println!("\t{}", token)),
         }
     }
     // Parse the tokens.

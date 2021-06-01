@@ -10,15 +10,12 @@ use super::token::Type;
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct Def {
     pub name: Identifier,
-    pub params: Params
+    pub params: Params,
 }
 
 impl Def {
     pub fn new(name: String, params: Option<Vec<String>>) -> Self {
-        Self {
-            name,
-            params
-        }
+        Self { name, params }
     }
 
     /// Add a new parameter name to the definition.
@@ -60,21 +57,18 @@ impl Ast {
     pub fn new() -> Self {
         Self {
             global_defs: HashMap::new(),
-            body: AstNode::Empty
+            body: AstNode::Empty,
         }
     }
 
     pub fn lookup(&self, def: &str) -> Option<&(Params, AstNode)> {
         self.global_defs.get(def)
-    } 
+    }
 }
 
 impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f, "{} . {}",
-            "defs", self.body
-        )
+        write!(f, "{} . {}", "defs", self.body)
     }
 }
 
@@ -92,7 +86,11 @@ impl Default for Ast {
 ///     implementation but never actually stored in the AST.
 #[derive(Debug, Clone)]
 pub enum AstNode {
-    Where(Option<Box<AstNode>>, HashMap<Identifier, (Params, AstNode)>, Option<Box<AstNode>>),
+    Where(
+        Option<Box<AstNode>>,
+        HashMap<Identifier, (Params, AstNode)>,
+        Option<Box<AstNode>>,
+    ),
     /// Function application used for currying functions
     App(Box<AstNode>, Box<AstNode>),
     // Variable/function identifier
@@ -103,14 +101,22 @@ pub enum AstNode {
     Builtin(Op),
     // Empty expression
     Empty,
+    // Combinators
+    S,
+    K,
+    I,
+    Y,
+    U,
 }
 
 impl fmt::Display for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
-            f, "{}",
+            f,
+            "{}",
             match self {
-                AstNode::Where(Some(expr), _, Some(nested_where)) => format!("{} where {}", expr, nested_where),
+                AstNode::Where(Some(expr), _, Some(nested_where)) =>
+                    format!("{} where {}", expr, nested_where),
                 AstNode::Where(Some(expr), _, None) => format!("{} where", expr),
                 AstNode::Where(None, _, None) => "where".to_string(),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
@@ -118,10 +124,21 @@ impl fmt::Display for AstNode {
                 AstNode::Constant(t) => t.to_string(),
                 AstNode::Builtin(op) => op.to_string(),
                 AstNode::Empty => "empty".to_string(),
-                _ => "unkown".to_string()
+                AstNode::S => "S".to_string(),
+                AstNode::K => "K".to_string(),
+                AstNode::I => "I".to_string(),
+                _ => "unkown".to_string(),
             }
         )
     }
+}
+
+pub(crate) fn apply2(astnode1: AstNode, astnode2: AstNode) -> AstNode {
+    AstNode::App(Box::new(astnode1), Box::new(astnode2))
+}
+
+pub(crate) fn apply3(astnode1: AstNode, astnode2: AstNode, astnode3: AstNode) -> AstNode {
+    AstNode::App(Box::new(apply2(astnode1, astnode2)), Box::new(astnode3))
 }
 
 /// Different types of operations. In SASL there are three types:
@@ -133,16 +150,17 @@ pub enum Op {
     PrefixOp(Type),
     InfixOp(Type),
     //PostfixOp(Type),
-    Cond
+    Cond,
 }
 
 impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
-            f, "{}", 
+            f,
+            "{}",
             match self {
                 Op::PrefixOp(t) | Op::InfixOp(t) => t.to_string(),
-                Op::Cond => "cond".to_string()
+                Op::Cond => "cond".to_string(),
             }
         )
     }

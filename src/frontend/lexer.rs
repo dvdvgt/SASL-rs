@@ -22,7 +22,7 @@ pub struct Lexer<'a> {
     token_pos: Position,
     /// The current absolute starting position of a token.
     start_idx: usize,
-    /// The current absolute position in the source code. 
+    /// The current absolute position in the source code.
     current_idx: usize,
 }
 
@@ -53,13 +53,15 @@ impl<'a> Lexer<'a> {
         }
         // Add end of file token at the end.
         self.start_idx = self.current_idx;
-        self.tokens.push_back(
-            Token::new(
-                T![eof],
-                Position::new(self.token_pos.line, self.start_idx as u32, self.current_idx as u32),
-            "EOF"
-            )
-        );
+        self.tokens.push_back(Token::new(
+            T![eof],
+            Position::new(
+                self.token_pos.line,
+                self.start_idx as u32,
+                self.current_idx as u32,
+            ),
+            "EOF",
+        ));
         Ok(self.tokens.clone())
     }
 

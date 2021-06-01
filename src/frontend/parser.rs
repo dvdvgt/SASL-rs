@@ -3,8 +3,14 @@
 use std::collections::{hash_map::HashMap, VecDeque};
 use std::error::Error;
 
-use super::{ast::{AstNode, Op, Def, Ast, Params, Identifier}, token::{Token, Type}};
-use crate::{T, error::SaslError::ParseError};
+use super::{
+    ast::{Ast, AstNode, Def, Identifier, Op, Params},
+    token::{Token, Type},
+};
+use crate::{
+    error::SaslError::{self, ParseError},
+    T,
+};
 
 /// The `Parser` struct is repsonsible for parsing a vector tokens to the intermediate AST
 /// representation
@@ -13,15 +19,14 @@ pub struct Parser<'a> {
 }
 
 /// Represents the result of most parser functions where either a AstNode is returned or
-/// a parse error occured and Err is returned. 
-type ParserResult = Result<AstNode, Box<dyn Error>>;
+/// a parse error occured and Err is returned.
+type ParserResult = Result<AstNode, SaslError>;
 
 /// Defs is a hashmap where each entry is a mapping of an identifier (constant or function name)
 /// to the corresponding vector of optional parameter names and the constant/function body.
 type Defs = HashMap<Identifier, (Params, AstNode)>;
 
 impl<'a> Parser<'a> {
-
     pub fn new(tokens: VecDeque<Token<'a>>) -> Self {
         Self { tokens }
     }
@@ -37,7 +42,8 @@ impl<'a> Parser<'a> {
 
     /// Peeks at the type of the token at front of the queue.
     fn peek(&self) -> &Type {
-        self.tokens.front()
+        self.tokens
+            .front()
             .map(|token| &token.typ)
             .unwrap_or(&T![eof])
     }
@@ -51,47 +57,41 @@ impl<'a> Parser<'a> {
     /// is returned otherwise an error is thrown.
     // TODO
     fn consume(&mut self, expected: &Type) -> Token<'a> {
-        let token = self.next()
-            .expect(
-                &format!("Expected '{}', but there was none.", expected)
-            );
-        assert_eq!(&token.typ, expected, "Expected '{}', but found '{}'", expected, &token.typ);
+        let token = self
+            .next()
+            .expect(&format!("Expected '{}', but there was none.", expected));
+        assert_eq!(
+            &token.typ, expected,
+            "Expected '{}', but found '{}'",
+            expected, &token.typ
+        );
         token
     }
 
     /// Apply an operation to one argument.
     fn apply2(&self, op: AstNode, arg: AstNode) -> AstNode {
-        AstNode::App(
-            Box::new(op), Box::new(arg)
-        )
+        AstNode::App(Box::new(op), Box::new(arg))
     }
 
     /// Apply an operation to two arguments.
     fn apply3(&self, op: AstNode, inner_arg: AstNode, outer_arg: AstNode) -> AstNode {
-        AstNode::App(
-            Box::new(self.apply2(op, inner_arg)),
-            Box::new(outer_arg)
-        )
+        AstNode::App(Box::new(self.apply2(op, inner_arg)), Box::new(outer_arg))
     }
 
     /// Create a parse error with a custom error message.
-    fn token_parse_err(&self, token: Token<'a>, err: &str) -> Box<dyn Error> {
-        Box::new(
-            ParseError {
-                    pos: token.pos,
-                    msg: format!("{} Found {}:{} instead.", err, token.typ, token.lexeme)
-            }
-        )
+    fn token_parse_err(&self, token: Token<'a>, err: &str) -> SaslError {
+        ParseError {
+            pos: token.pos,
+            msg: format!("{} Found {}:{} instead.", err, token.typ, token.lexeme),
+        }
     }
 
-    fn parse_err(&mut self, err: &str) -> Box<dyn Error> {
+    fn parse_err(&mut self, err: &str) -> SaslError {
         let token = self.next().unwrap();
-        Box::new(
-            ParseError {
-                pos: token.pos,
-                msg: err.to_string()
-            }
-        )
+        ParseError {
+            pos: token.pos,
+            msg: err.to_string(),
+        }
     }
 
     //--------
@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
 
     /// Parse the given tokens into a AST.
     /// Corresponds to the <system> non-terminal in the grammar rules.
-    pub fn parse(&mut self) -> Result<Ast, Box<dyn Error>> {
+    pub fn parse(&mut self) -> Result<Ast, SaslError> {
         let mut ast = Ast::new();
         if self.expect_type(T![def]) {
             self.parse_funcdefs(&mut ast.global_defs)?;
@@ -119,18 +119,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_funcdefs(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
+    fn parse_funcdefs(&mut self, global_defs: &mut Defs) -> Result<(), SaslError> {
         self.consume(&T![def]);
-        let (Def { name, params}, ast) = self.parse_def()?;
+        let (Def { name, params }, ast) = self.parse_def()?;
         global_defs.insert(name, (params, ast));
         self.parse_funcdefs1(global_defs)?;
         Ok(())
     }
 
-    fn parse_funcdefs1(&mut self, global_defs: &mut Defs) -> Result<(), Box<dyn Error>> {
+    fn parse_funcdefs1(&mut self, global_defs: &mut Defs) -> Result<(), SaslError> {
         if self.expect_type(T![def]) {
             self.next();
-            let (Def { name, params}, ast) = self.parse_def()?;
+            let (Def { name, params }, ast) = self.parse_def()?;
             global_defs.insert(name, (params, ast));
             self.parse_funcdefs1(global_defs)
         } else {
@@ -138,18 +138,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_defs(&mut self) -> Result<Defs, Box<dyn Error>> {
+    fn parse_defs(&mut self) -> Result<Defs, SaslError> {
         let mut defs = HashMap::new();
-        let (Def { name, params}, ast) = self.parse_def()?;
+        let (Def { name, params }, ast) = self.parse_def()?;
         defs.insert(name, (params, ast));
         self.parse_defs1(&mut defs)?;
         Ok(defs)
     }
 
-    fn parse_defs1(&mut self, defs: &mut Defs) -> Result<(), Box<dyn Error>> {
+    fn parse_defs1(&mut self, defs: &mut Defs) -> Result<(), SaslError> {
         if self.expect_type(T![;]) {
             self.consume(&T![;]);
-            let (Def { name, params}, ast) = self.parse_def()?;
+            let (Def { name, params }, ast) = self.parse_def()?;
             defs.insert(name, (params, ast));
             self.parse_defs1(defs)
         } else {
@@ -157,15 +157,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_def(&mut self) -> Result<(Def, AstNode), Box<dyn Error>> {
+    fn parse_def(&mut self) -> Result<(Def, AstNode), SaslError> {
         let name = self.parse_name()?;
         match name {
             AstNode::Ident(n) => Ok(self.parse_abstraction(Def::new(n, None))?),
-            _ => Err(self.parse_err("Expected identifier for definition."))
+            _ => Err(self.parse_err("Expected identifier for definition.")),
         }
     }
     // TODO add error handling!!!
-    fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, AstNode), Box<dyn Error>> {
+    fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, AstNode), SaslError> {
         if self.expect_type(T![=]) {
             self.consume(&T![=]);
             let expr = self.parse_expr().unwrap();
@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
             AstNode::Where(None, defs, rhs) => {
                 Ok(AstNode::Where(Some(Box::new(cond_expr)), defs, rhs))
             }
-            _ => Ok(AstNode::Empty)
+            _ => Ok(AstNode::Empty),
         }
     }
 
@@ -200,7 +200,10 @@ impl<'a> Parser<'a> {
                 nested_where @ AstNode::Where(None, _, None) => {
                     Ok(AstNode::Where(None, defs, Some(Box::new(nested_where))))
                 }
-                _ => Err(Box::new(ParseError {pos, msg: "Unexpected error.".to_string()}))
+                _ => Err(ParseError {
+                    pos,
+                    msg: "Unexpected error.".to_string(),
+                }),
             }
         } else {
             Ok(AstNode::Empty)
@@ -215,12 +218,10 @@ impl<'a> Parser<'a> {
             let then_expr = self.parse_condexpr()?;
             self.consume(&T![else]);
             let else_expr = self.parse_condexpr()?;
-            Ok(
-                self.apply2(
-                    self.apply3(AstNode::Builtin(Op::Cond), predicate, then_expr), 
-                    else_expr
-                )
-            )
+            Ok(self.apply2(
+                self.apply3(AstNode::Builtin(Op::Cond), predicate, then_expr),
+                else_expr,
+            ))
         } else {
             self.parse_listexpr()
         }
@@ -231,9 +232,7 @@ impl<'a> Parser<'a> {
         let list_expr = self.parse_listexpr1()?;
         match list_expr {
             AstNode::Empty => Ok(op_expr),
-            _ => {
-                Ok(self.apply3(AstNode::Builtin(Op::InfixOp(T![:])), op_expr, list_expr))
-            }
+            _ => Ok(self.apply3(AstNode::Builtin(Op::InfixOp(T![:])), op_expr, list_expr)),
         }
     }
 
@@ -289,8 +288,8 @@ impl<'a> Parser<'a> {
                 let add = self.parse_add()?;
                 let lhs1 = self.apply3(op, lhs, add);
                 self.parse_compar1(lhs1)
-            },
-            _ => Ok(lhs)
+            }
+            _ => Ok(lhs),
         }
     }
 
@@ -307,21 +306,19 @@ impl<'a> Parser<'a> {
                 let rhs1 = AstNode::App(
                     Box::new(AstNode::App(
                         Box::new(AstNode::Builtin(Op::InfixOp(op))),
-                        Box::new(rhs)
+                        Box::new(rhs),
                     )),
-                    Box::new(mul)
+                    Box::new(mul),
                 );
                 self.parse_add1(rhs1)
             }
-            _ => {
-                Ok(rhs)
-            }
+            _ => Ok(rhs),
         }
     }
 
     fn parse_mul(&mut self) -> ParserResult {
         let rhs = self.parse_factor()?;
-        self.parse_mul1(rhs)   
+        self.parse_mul1(rhs)
     }
 
     fn parse_mul1(&mut self, rhs: AstNode) -> ParserResult {
@@ -331,14 +328,14 @@ impl<'a> Parser<'a> {
                 let factor = self.parse_factor()?;
                 let rhs1 = AstNode::App(
                     Box::new(AstNode::App(
-                        Box::new(AstNode::Builtin(Op::InfixOp(op))), 
-                        Box::new(rhs)
+                        Box::new(AstNode::Builtin(Op::InfixOp(op))),
+                        Box::new(rhs),
                     )),
-                    Box::new(factor)
+                    Box::new(factor),
                 );
                 self.parse_mul1(rhs1)
             }
-            _ => Ok(rhs)
+            _ => Ok(rhs),
         }
     }
 
@@ -349,9 +346,7 @@ impl<'a> Parser<'a> {
                 let comb = self.parse_comb()?;
                 Ok(self.apply2(AstNode::Builtin(Op::PrefixOp(prefix)), comb))
             }
-            _ => {
-                self.parse_comb()
-            }
+            _ => self.parse_comb(),
         }
     }
 
@@ -362,12 +357,18 @@ impl<'a> Parser<'a> {
 
     fn parse_comb1(&mut self, lhs: AstNode) -> ParserResult {
         match self.peek() {
-            T![head] | T![tail] | Type::String(_) | Type::Number(_) | Type::Boolean(_) |
-            T!['['] | T!['('] | T![ident] => {
+            T![head]
+            | T![tail]
+            | Type::String(_)
+            | Type::Number(_)
+            | Type::Boolean(_)
+            | T!['[']
+            | T!['(']
+            | T![ident] => {
                 let lhs1 = AstNode::App(Box::new(lhs), Box::new(self.parse_simple()?));
                 self.parse_comb1(lhs1)
             }
-            _ => Ok(lhs)
+            _ => Ok(lhs),
         }
     }
 
@@ -375,7 +376,9 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![ident] => self.parse_name(),
             T![head] | T![tail] => self.parse_builtin(),
-            Type::String(_) | Type::Number(_) | Type::Boolean(_) | T![nil] | T!['['] => self.parse_constant(),
+            Type::String(_) | Type::Number(_) | Type::Boolean(_) | T![nil] | T!['['] => {
+                self.parse_constant()
+            }
             T!['('] => {
                 self.consume(&T!['(']);
                 let expr = self.parse_expr()?;
@@ -386,22 +389,26 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         let token = self.next().unwrap();
-                    Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected ')' but found {}.", token.typ)}))
-                    }   
+                        Err(ParseError {
+                            pos: token.pos,
+                            msg: format!("Expected ')' but found {}.", token.typ),
+                        })
+                    }
                 }
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(self.token_parse_err(token, "Expected identifier, hd, tl, constant or grouped expression."))
+                Err(self.token_parse_err(
+                    token,
+                    "Expected identifier, hd, tl, constant or grouped expression.",
+                ))
             }
         }
     }
 
     fn parse_name(&mut self) -> ParserResult {
         if self.peek() == &T![ident] {
-            let id_name = self.next()
-                .unwrap()
-                .lexeme.to_string();
+            let id_name = self.next().unwrap().lexeme.to_string();
             Ok(AstNode::Ident(id_name))
         } else {
             let token = self.next().unwrap();
@@ -424,7 +431,9 @@ impl<'a> Parser<'a> {
 
     fn parse_constant(&mut self) -> ParserResult {
         match self.peek() {
-            Type::Number(_) | Type::String(_) | Type::Boolean(_) => Ok(AstNode::Constant(self.next().unwrap().typ)),
+            Type::Number(_) | Type::String(_) | Type::Boolean(_) => {
+                Ok(AstNode::Constant(self.next().unwrap().typ))
+            }
             T![nil] => Ok(AstNode::Constant(self.consume(&T![nil]).typ)),
             T!['['] => {
                 self.consume(&T!['[']);
@@ -463,9 +472,12 @@ impl<'a> Parser<'a> {
         let expr = self.parse_expr()?;
         let list_app = AstNode::App(
             Box::new(AstNode::Builtin(Op::InfixOp(T![:]))),
-            Box::new(expr)
+            Box::new(expr),
         );
-        Ok(AstNode::App(Box::new(list_app), Box::new(self.parse_listelems1()?)))
+        Ok(AstNode::App(
+            Box::new(list_app),
+            Box::new(self.parse_listelems1()?),
+        ))
     }
 
     fn parse_listelems1(&mut self) -> ParserResult {
@@ -475,13 +487,14 @@ impl<'a> Parser<'a> {
                 let expr = self.parse_expr()?;
                 let list_app = AstNode::App(
                     Box::new(AstNode::Builtin(Op::InfixOp(T![:]))),
-                    Box::new(expr)
+                    Box::new(expr),
                 );
-                Ok(AstNode::App(Box::new(list_app), Box::new(self.parse_listelems1()?)))
+                Ok(AstNode::App(
+                    Box::new(list_app),
+                    Box::new(self.parse_listelems1()?),
+                ))
             }
-            _ => {
-                Ok(AstNode::Constant(T![nil]))
-            }
+            _ => Ok(AstNode::Constant(T![nil])),
         }
     }
 
@@ -493,7 +506,13 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected prefix operator (+, -, not) but found {}.", token.typ)}))
+                Err(ParseError {
+                    pos: token.pos,
+                    msg: format!(
+                        "Expected prefix operator (+, -, not) but found {}.",
+                        token.typ
+                    ),
+                })
             }
         }
     }
@@ -506,7 +525,10 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected infix operator (+, -) but found {}.", token.typ)}))
+                Err(ParseError {
+                    pos: token.pos,
+                    msg: format!("Expected infix operator (+, -) but found {}.", token.typ),
+                })
             }
         }
     }
@@ -519,7 +541,10 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected infix operator (*, /) but found {}.", token.typ)}))
+                Err(ParseError {
+                    pos: token.pos,
+                    msg: format!("Expected infix operator (*, /) but found {}.", token.typ),
+                })
             }
         }
     }
@@ -532,7 +557,13 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let token = self.next().unwrap();
-                Err(Box::new(ParseError {pos: token.pos, msg: format!("Expected relational infix operator (=, ~=, <, >, <=, >=) but found {}.", token.typ)}))
+                Err(ParseError {
+                    pos: token.pos,
+                    msg: format!(
+                        "Expected relational infix operator (=, ~=, <, >, <=, >=) but found {}.",
+                        token.typ
+                    ),
+                })
             }
         }
     }
@@ -579,29 +610,32 @@ mod tests {
     #[test]
     fn test_parse_def() {
         let mut defs = HashMap::new();
-        parse_def("def a = 5 + 2\ndef b x = -2.3 * x\ndef plus x y z = x + y + z", &mut defs);
+        parse_def(
+            "def a = 5 + 2\ndef b x = -2.3 * x\ndef plus x y z = x + y + z",
+            &mut defs,
+        );
 
         assert_eq!(defs.len(), 3);
 
-        let def = &Def { name: "a".to_string(), params: None };
+        let def = &Def {
+            name: "a".to_string(),
+            params: None,
+        };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(
-            astnode.to_string(),
-            "((+ @ Number:5) @ Number:2)"
-        );
-        
-        let def = &Def { name: "b".to_string(), params: Some(vec!["x".to_string()]) };
-        let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(
-            astnode.to_string(),
-            "((* @ (- @ Number:2.3)) @ Id:x)"
-        );
+        assert_eq!(astnode.to_string(), "((+ @ Number:5) @ Number:2)");
 
-        let def = &Def { name: "plus".to_string(), params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()])};
+        let def = &Def {
+            name: "b".to_string(),
+            params: Some(vec!["x".to_string()]),
+        };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(
-            astnode.to_string(),
-            "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)"
-        );
+        assert_eq!(astnode.to_string(), "((* @ (- @ Number:2.3)) @ Id:x)");
+
+        let def = &Def {
+            name: "plus".to_string(),
+            params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()]),
+        };
+        let (_, astnode) = defs.get(&def.name).unwrap();
+        assert_eq!(astnode.to_string(), "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)");
     }
 }

@@ -89,13 +89,14 @@ pub enum Type {
     Semicolon,
 
     Whitespace,
-    Eof
+    Eof,
 }
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
-            f, "{}",
+            f,
+            "{}",
             match self {
                 Type::String(x) => format!("String:{}", x),
                 Type::Number(x) => format!("Number:{}", x),
@@ -131,13 +132,13 @@ impl fmt::Display for Type {
                 T!['['] => "[".to_string(),
                 T![']'] => "]".to_string(),
                 Type::Whitespace => " ".to_string(),
-                T![eof] => "<EOF>".to_string()
+                T![eof] => "<EOF>".to_string(),
             }
         )
     }
 }
 
-/// Hashmap with all keywords in SASL used for differentiating between 
+/// Hashmap with all keywords in SASL used for differentiating between
 /// keywords and identifiers.
 static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
     "hd" => Type::Head,
