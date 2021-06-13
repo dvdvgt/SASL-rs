@@ -84,13 +84,14 @@ pub fn run(src: &str, args: &ArgMatches) {
             // Only output AST if verbose flag is set.
             if args.is_present("verbose") {
                 println!("AST:");
-                println!("\t{}", ast);
+                println!("\t{:?}", ast);
             }
             // Only create graph if flag is set.
             if args.is_present("visualize") {
                 let mut viz = Visualizer::new("g", false);
                 viz.visualize_ast(ast);
                 let filename = args.value_of("visualize").unwrap();
+                println!("{}.pdf", filename);
                 viz.write_to_pdf(&format!("{}.pdf", filename));
                 viz.write_to_dot(&format!("{}.dot", filename));
             }

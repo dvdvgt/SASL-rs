@@ -81,7 +81,7 @@ impl Visualizer {
         match nodes {
             AstNode::Empty => (),
             AstNode::Ident(x) => self.add_node(format!("Id:{}", x)),
-            AstNode::Where(Some(lhs_expr), defs, _) => {
+            AstNode::Where(lhs_expr, defs) => {
                 let where_id = self.get_next_id();
                 self.add_node("where".to_string());
 
@@ -102,7 +102,7 @@ impl Visualizer {
             }
             AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
             // Combinators
-            AstNode::S | AstNode::K | AstNode::I => self.add_node(nodes.to_string()),
+            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node(nodes.to_string()),
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
@@ -142,7 +142,7 @@ impl Visualizer {
         let mut dot = Command::new("dot")
             .stdin(Stdio::piped())
             .arg("-Tpdf")
-            .arg(format!("-o {}", outfile))
+            .arg(format!("-o{}", outfile))
             .spawn()
             .expect("Unable to create AST visualization. Graphviz is probably not installed");
 

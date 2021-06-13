@@ -1,7 +1,6 @@
 //! Recursive descent parser implementation.
 
 use std::collections::{hash_map::HashMap, VecDeque};
-use std::error::Error;
 
 use super::{
     ast::{Ast, AstNode, Def, Identifier, Op, Params},
@@ -180,33 +179,17 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expr(&mut self) -> ParserResult {
         let cond_expr = self.parse_condexpr()?;
-        let expr1 = self.parse_expr1()?;
-        match expr1 {
-            AstNode::Empty => Ok(cond_expr),
-            AstNode::Where(None, defs, rhs) => {
-                Ok(AstNode::Where(Some(Box::new(cond_expr)), defs, rhs))
-            }
-            _ => Ok(AstNode::Empty),
-        }
+        self.parse_expr1(cond_expr)
     }
 
-    fn parse_expr1(&mut self) -> ParserResult {
+    fn parse_expr1(&mut self, expr: AstNode) -> ParserResult {
         if self.expect_type(T![where]) {
             let pos = self.consume(&T![where]).pos;
             let defs = self.parse_defs()?;
-            let where_expr = self.parse_expr1()?;
-            match where_expr {
-                AstNode::Empty => Ok(AstNode::Where(None, defs, None)),
-                nested_where @ AstNode::Where(None, _, None) => {
-                    Ok(AstNode::Where(None, defs, Some(Box::new(nested_where))))
-                }
-                _ => Err(ParseError {
-                    pos,
-                    msg: "Unexpected error.".to_string(),
-                }),
-            }
+            let where_expr = AstNode::Where(Box::new(expr), defs);
+            self.parse_expr1(where_expr)
         } else {
-            Ok(AstNode::Empty)
+            Ok(expr)
         }
     }
 

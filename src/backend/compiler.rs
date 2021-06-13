@@ -1,13 +1,19 @@
+use std::collections::HashMap;
+
 use crate::error::SaslError;
 use crate::frontend::ast::{self, Ast, AstNode, Identifier, Params};
 
-pub struct Compiler<'a> {
-    ast: &'a mut Ast,
+use super::abstractor::Abstractor;
+
+pub struct Compiler {
+    ast: Ast,
+    /// Reduction graph created while compiling
+    rg: Ast
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(ast: &'a mut Ast) -> Self {
-        Self { ast }
+impl Compiler {
+    pub fn new(ast: Ast) -> Self {
+        Self { ast, rg: Ast::default() }
     }
 
     fn throw_compiler_error(msg: &str) -> SaslError {
@@ -17,39 +23,30 @@ impl<'a> Compiler<'a> {
     }
 
     /// Free all occurences of all parameters of a given definition.
-    fn free_occurences(&mut self, id: &str) {
-        /// Free all occurences of one parameter from a given AST subtree.
-        fn free_occurence(param_name: &str, subtree: AstNode) -> Result<AstNode, SaslError> {
-            match subtree {
-                AstNode::Constant(_)
-                | AstNode::S
-                | AstNode::K
-                | AstNode::I
-                | AstNode::Builtin(_) => Ok(ast::apply2(AstNode::K, subtree)),
-                AstNode::Ident(ref n) => {
-                    if n == param_name {
-                        Ok(AstNode::I)
-                    } else {
-                        Ok(ast::apply2(AstNode::K, subtree))
-                    }
-                }
-                AstNode::App(f, a) => Ok(ast::apply3(
-                    AstNode::S,
-                    free_occurence(param_name, *f)?,
-                    free_occurence(param_name, *a)?,
-                )),
-                _ => Err(Compiler::throw_compiler_error("Erroneous AST.")),
+    fn free_occurences_global_def(&mut self) -> Result<(), SaslError> {
+        for (name, (p, body)) in self.ast.global_defs.iter() {
+            // Only functions need to be freeded of parameter names
+            if let Some(params) = p {
+                let new_body = Abstractor::new(
+                p,
+                ).abstract_ids(body.clone())?;
+
+                self.rg.global_defs.insert(
+                name.to_string(),
+                (p.clone(), new_body)
+                );
+            } else {
+                self.rg.global_defs.insert(name.to_string(), (p.clone(), body.clone()));
             }
         }
-        // Remove AST of the definition, modify it and reinsert it.
-        let (params, mut body) = self.ast.global_defs.remove(id).unwrap();
-        // Only free variable occurences if the definition has parameters.
-        if let Some(ref params_vec) = params {
-            for param_name in params_vec.iter().rev() {
-                body = free_occurence(param_name, body).unwrap();
-            }
-            self.ast.global_defs.insert(id.to_string(), (params, body));
-        }
+        Ok(())
+    }
+
+    pub fn compile(&mut self) -> Result<&mut Ast, SaslError> {
+        self.free_occurences_global_def()?;
+        // TODO handle where in body
+        self.rg.body = Abstractor::new(&None).abstract_ids(self.ast.body.clone())?;
+        Ok(&mut self.rg)
     }
 }
 
@@ -65,30 +62,41 @@ mod tests {
     }
 
     #[test]
-    fn test_free_occurences() {
-        let mut ast = parse_to_ast("def incr x = 1 + x . 1");
-        let mut compiler = Compiler::new(&mut ast);
-        compiler.free_occurences("incr");
+    fn test_free_occurences_global_def() {
+        let ast = parse_to_ast(
+            "def incr x = 1 + y where y = 2 * x \
+            def plus x y = x + y \
+            def const = 5*3 \
+            def rec x = if x = 0 then 0 else rec (x-1)
+            def g x = f x where f x = f y
+            . x + y where x = 1; y = 2"
+        );
+        let mut compiler = Compiler::new(ast);
+        let rg = compiler.compile().unwrap();
+        //println!("{:?}", &rg);
+        /*
         assert_eq!(
-            ast.global_defs.get("incr").unwrap().1.to_string(),
+            rg.global_defs.get("incr").unwrap().1.to_string(),
             "((S @ ((S @ (K @ +)) @ (K @ Number:1))) @ I)"
         );
-
-        let mut ast = parse_to_ast("def null xs = xs = nil . 1");
-        let mut compiler = Compiler::new(&mut ast);
-        compiler.free_occurences("null");
         assert_eq!(
-            ast.global_defs.get("null").unwrap().1.to_string(),
+            rg.global_defs.get("null").unwrap().1.to_string(),
             "((S @ ((S @ (K @ =)) @ I)) @ (K @ nil))"
         );
-
-        let mut ast = parse_to_ast("def plus x y = x + y . 1");
-        let mut compiler = Compiler::new(&mut ast);
-        compiler.free_occurences("plus");
+        assert_eq!(rg.global_defs.get("const").unwrap().1.to_string(), "((* @ Number:5) @ Number:3)");
+        assert_eq!(
+            rg.global_defs.get("plus").unwrap().1.to_string(),
+            "((S @ ((S @ (K @ S)) @ ((S @ ((S @ (K @ S)) @ ((S @ (K @ K)) @ (K @ +)))) @ ((S @ (K @ K)) @ I)))) @ (K @ I))"
+        );
+        */
         let mut viz = Visualizer::new("g", false);
-        viz.visualize_ast_nodes(&ast.global_defs.get("plus").unwrap().1);
-        viz.write_to_pdf("incr.pdf");
-        viz.write_to_dot("incr.dot");
-        assert_eq!(ast.global_defs.get("plus").unwrap().1.to_string(), "");
+        viz.visualize_ast(
+            &rg
+        );
+        viz.write_to_pdf("test.pdf");
+        assert_eq!(
+            rg.global_defs.get("rec").unwrap().1.to_string(),
+            ""
+        )
     }
 }

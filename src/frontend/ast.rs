@@ -87,9 +87,8 @@ impl Default for Ast {
 #[derive(Debug, Clone)]
 pub enum AstNode {
     Where(
-        Option<Box<AstNode>>,
+        Box<AstNode>,
         HashMap<Identifier, (Params, AstNode)>,
-        Option<Box<AstNode>>,
     ),
     /// Function application used for currying functions
     App(Box<AstNode>, Box<AstNode>),
@@ -115,10 +114,10 @@ impl fmt::Display for AstNode {
             f,
             "{}",
             match self {
-                AstNode::Where(Some(expr), _, Some(nested_where)) =>
-                    format!("{} where {}", expr, nested_where),
-                AstNode::Where(Some(expr), _, None) => format!("{} where", expr),
-                AstNode::Where(None, _, None) => "where".to_string(),
+                //AstNode::Where(Some(expr), _, Some(nested_where)) =>
+                    //format!("{} where {}", expr, nested_where),
+                AstNode::Where(expr, _) => format!("{} where", expr),
+                //AstNode::Where(None, _, None) => "where".to_string(),
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
@@ -127,7 +126,9 @@ impl fmt::Display for AstNode {
                 AstNode::S => "S".to_string(),
                 AstNode::K => "K".to_string(),
                 AstNode::I => "I".to_string(),
-                _ => "unkown".to_string(),
+                AstNode::Y => "Y".to_string(),
+                AstNode::U => "U".to_string(),
+                _ => "unkown".to_string()
             }
         )
     }
