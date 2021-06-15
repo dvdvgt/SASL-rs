@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{error::SaslError, frontend::ast::{AstNode, Def, Identifier, self}};
+use crate::{T, error::SaslError, frontend::ast::{self, AstNode, Identifier, Op}};
 
 pub struct Abstractor<'a> {
     ids: &'a Option<Vec<Identifier>>
@@ -13,14 +13,23 @@ impl<'a> Abstractor<'a> {
         }
     }
 
-    fn check_for_recursion(&self, id: &str, subtree: &AstNode) -> bool {
+    fn check_for_recursion(&self, id: &Vec<Identifier>, subtree: &AstNode) -> bool {
         match subtree {
             AstNode::App(lhs, rhs) => {
                 self.check_for_recursion(id, lhs) || self.check_for_recursion(id, rhs)
             }
-            AstNode::Ident(s) => s == id,
+            AstNode::Ident(s) => id.contains(&s),
             _ => false
         }
+    }
+
+    fn check_for_mutual_recursion(&self, defs: &Vec<(Identifier, AstNode)>) -> bool {
+        let def_ids = defs.iter().map(|x| x.0.clone()).collect();
+        let mut found_recursion = false;
+        for (_, body) in defs {
+            found_recursion = found_recursion || self.check_for_recursion(&def_ids, body);
+        }
+        found_recursion
     }
 
     pub fn abstract_ids(&mut self, body: AstNode) -> Result<AstNode, SaslError> {
@@ -33,7 +42,7 @@ impl<'a> Abstractor<'a> {
         if let AstNode::Where(ref lhs, ref defs) = new_body {
             if defs.len() == 1 {
                 let (def_name, (params, body)) = defs.iter().next().unwrap();
-                let where_def_body = self.abstract_single_where(def_name, params, body)?;
+                let where_def_body = self.abstract_single_where(def_name, params, body)?;println!("{:?}", where_def_body);
                 let free_def_name = self.abstract_id(*lhs.clone(), def_name)?;
                 new_body = ast::apply2(free_def_name, where_def_body);
             } else {
@@ -95,7 +104,7 @@ impl<'a> Abstractor<'a> {
             new_body = abst.abstract_ids(new_body)?;
         }
 
-        if self.check_for_recursion(name, &new_body) {
+        if self.check_for_recursion(&vec![name.clone()], &new_body) {
             Ok(ast::apply2(AstNode::Y, self.abstract_id(new_body, name)?))
         } else {
             Ok(new_body)
@@ -107,18 +116,44 @@ impl<'a> Abstractor<'a> {
         let mut abstracted_defs = vec![];
         for (name, (params, body)) in defs {
             let new_body = self.abstract_single_where(name, params, body)?;
-            abstracted_defs.push((name, new_body));
+            abstracted_defs.push((name.clone(), new_body));
+        }
+        let def_names: Vec<Identifier> = abstracted_defs.iter().map(|(name, _)| name.clone()).collect();
+        let is_recursive = self.check_for_mutual_recursion(&abstracted_defs);
+        // Build [[x1] E1, [x2]E2, ...] = [x1]E1 : ([x2]E2 : nil)
+        let mut defs_list = ast::apply3( 
+            AstNode::Builtin(Op::InfixOp(T![:])),
+            abstracted_defs.pop().unwrap().1,
+            AstNode::Constant(T![nil])
+        );
+        while !abstracted_defs.is_empty() {
+            defs_list = ast::apply3(
+                AstNode::Builtin(Op::InfixOp(T![:])), 
+                abstracted_defs.pop().unwrap().1,
+                defs_list
+            );
         }
         // Abstract where definition calls from main body
-        let mut new_main_body = lhs;
-        for (name, _) in abstracted_defs.clone().into_iter().rev() {
-            new_main_body = self.abstract_id(new_main_body, name)?;
+        // E1 where f x = E2; g y = E3 ~> U @ ([f]( U @ [g]( K @ E1)))
+        let mut new_main_body = ast::apply2(AstNode::K, lhs);
+        for name in def_names.iter() {
+            new_main_body = ast::apply2(AstNode::U, self.abstract_id(new_main_body, &name)?);
         }
-        for (_, where_def_body) in abstracted_defs.into_iter().rev() {
-            new_main_body = ast::apply2(new_main_body, where_def_body);
+        // Abstract local function names if definitions are mutual recursive
+        // E1 where f1 x1 = E2:... g ...; f2 x2 = E3:... f ...; ... ~> Y @ (U @ [f1](U @ [f2](U @ ...(U @ f[n](K @ [[x1]E2], [x2]E3, ..., [xn]En]))
+        if is_recursive {
+            let mut rec_defs = ast::apply2(AstNode::K, defs_list);
+            for def_name in def_names.iter() {
+                println!("{}", def_name);
+                rec_defs = ast::apply2(AstNode::U, self.abstract_id(rec_defs, def_name)?);
+            }
+            rec_defs = ast::apply2(AstNode::Y, rec_defs);
+            // U @ ([f]( U @ [g]( K @ E1))) @ (Y @ (U @ [f1](U @ [f2](U @ ...(U @ f[n](K @ [[x1]E2], [x2]E3, ..., [xn]En])))
+            return Ok(ast::apply2(new_main_body, rec_defs));
         }
-        Ok(new_main_body)
-
+        // No (mutual) recursion found
+        // U @ ([f]( U @ [g]( K @ E1))) @ [[x1]E1, ..., [xn]En]
+        Ok(ast::apply2(new_main_body, defs_list))
     }
 }
 
@@ -131,5 +166,40 @@ mod tests {
         Parser::new(Lexer::new(code).tokenize().unwrap())
             .parse()
             .unwrap()
+    }
+
+    fn check_recursion(wh: AstNode) -> bool {
+        let abst = Abstractor::new(&None);
+        if let AstNode::Where(_, defs) = wh {
+            let mut d = Vec::new();
+            for (name, (_, body)) in defs {
+                d.push((name, body))
+            }
+            return abst.check_for_mutual_recursion(&d);
+        }   
+        false
+    }
+
+    #[test]
+    fn test_check_recursion() {
+        let mut ast = parse_to_ast(
+            "x where f x = g x; g y = f y"
+        );
+        assert!(check_recursion(ast.body));
+        ast = parse_to_ast(
+            "x where f x = f x; g y = g y"
+        );
+        assert!(check_recursion(ast.body));
+        ast = parse_to_ast(
+            "x where f x = x; g = 5"
+        );
+        assert!(!check_recursion(ast.body));
+        ast = parse_to_ast(
+            "1 where f x = 5 * x; g x = x; h x = g x"
+        );
+        assert!(check_recursion(ast.body));
+        ast = parse_to_ast(
+            "1 where f x = f x"
+        );
     }
 }

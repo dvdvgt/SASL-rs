@@ -1,7 +1,7 @@
 //! Abstract syntax tree datastructures.
 //! In here are all datastructures needed for creating the AST in the parser.
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, rc::Rc};
 
 use super::token::Type;
 

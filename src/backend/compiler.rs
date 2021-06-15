@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use crate::error::SaslError;
-use crate::frontend::ast::{self, Ast, AstNode, Identifier, Params};
+use crate::frontend::ast::Ast;
 
 use super::abstractor::Abstractor;
 
@@ -69,12 +67,12 @@ mod tests {
             def const = 5*3 \
             def rec x = if x = 0 then 0 else rec (x-1)
             def g x = f x where f x = f y
-            . x + y where x = 1; y = 2"
+            . 1 where f x = g x; g x = f x"
         );
         let mut compiler = Compiler::new(ast);
         let rg = compiler.compile().unwrap();
         //println!("{:?}", &rg);
-        /*
+
         assert_eq!(
             rg.global_defs.get("incr").unwrap().1.to_string(),
             "((S @ ((S @ (K @ +)) @ (K @ Number:1))) @ I)"
@@ -88,7 +86,7 @@ mod tests {
             rg.global_defs.get("plus").unwrap().1.to_string(),
             "((S @ ((S @ (K @ S)) @ ((S @ ((S @ (K @ S)) @ ((S @ (K @ K)) @ (K @ +)))) @ ((S @ (K @ K)) @ I)))) @ (K @ I))"
         );
-        */
+
         let mut viz = Visualizer::new("g", false);
         viz.visualize_ast(
             &rg

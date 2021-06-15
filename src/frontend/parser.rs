@@ -1,6 +1,7 @@
 //! Recursive descent parser implementation.
 
 use std::collections::{hash_map::HashMap, VecDeque};
+use std::rc::Rc;
 
 use super::{
     ast::{Ast, AstNode, Def, Identifier, Op, Params},
