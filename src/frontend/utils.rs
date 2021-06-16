@@ -38,16 +38,3 @@ impl Position {
         self.end_column = 1;
     }
 }
-
-#[macro_export]
-macro_rules! hashmap {
-    ( $( $key: expr => $value: expr ),+ ) => {
-      {
-          let mut map = std::collections::HashMap::new();
-          $(
-              map.insert($key, $value);
-          )+
-          map
-      }
-    };
-}

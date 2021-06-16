@@ -1,4 +1,4 @@
-use super::ast::{Ast, AstNode, Op};
+use super::ast::{Ast, AstNode, Op, AstNodePtr};
 use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;
 
@@ -38,7 +38,7 @@ impl Visualizer {
     fn add_definition(
         &mut self,
         def_root_id: String,
-        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNode)>,
+        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNodePtr)>,
     ) {
         for (def, (params, ast_node)) in defs {
             let mut def_name = def.clone();
@@ -61,7 +61,7 @@ impl Visualizer {
             // Add Edge from root to each definition
             self.add_edge(&def_root_id, &def_id);
             // Visualize the expression body of the definition
-            self.visualize_ast_nodes(ast_node);
+            self.visualize_ast_nodes(&ast_node);
         }
     }
 
@@ -77,8 +77,8 @@ impl Visualizer {
     }
 
     /// Create a graph from ast_nodes.
-    pub fn visualize_ast_nodes(&mut self, nodes: &AstNode) {
-        match nodes {
+    pub fn visualize_ast_nodes(&mut self, nodes: &AstNodePtr) {
+        match &*nodes.borrow() {
             AstNode::Empty => (),
             AstNode::Ident(x) => self.add_node(format!("Id:{}", x)),
             AstNode::Where(lhs_expr, defs) => {
@@ -102,7 +102,7 @@ impl Visualizer {
             }
             AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
             // Combinators
-            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node(nodes.to_string()),
+            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node((*nodes.borrow()).to_string()),
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
@@ -166,7 +166,7 @@ mod tests {
     use crate::frontend::lexer::Lexer;
     use crate::frontend::parser::Parser;
 
-    fn parse(input: &str) -> AstNode {
+    fn parse(input: &str) -> AstNodePtr {
         let mut lx = Lexer::new(input);
         let tokens = lx.tokenize().unwrap().clone();
         let mut parser = Parser::new(tokens);
