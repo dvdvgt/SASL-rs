@@ -6,7 +6,7 @@ use std::{
 
 use clap::{App, Arg, ArgMatches};
 
-use sasl::frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer};
+use sasl::{backend::{compiler, reduction::ReductionMachine}, frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer}};
 
 fn main() {
     let matches = App::new("SASL-rs")
@@ -79,7 +79,10 @@ pub fn run(src: &str, args: &ArgMatches) {
     let mut parser = Parser::new(tokens.unwrap());
     let expr = parser.parse();
     match expr {
-        Err(ref e) => eprintln!("{}", e),
+        Err(ref e) => {
+            eprintln!("{}", e);
+            return;
+        }
         Ok(ref ast) => {
             // Only output AST if verbose flag is set.
             if args.is_present("verbose") {
@@ -97,4 +100,10 @@ pub fn run(src: &str, args: &ArgMatches) {
             }
         }
     }
+    // Run abstractor
+    let mut expr = expr.unwrap();
+    compiler::compile(&mut expr).unwrap();
+    // Eval
+    let mut reductor = ReductionMachine::new(expr);
+    println!("{}", reductor.reduce().unwrap());
 }

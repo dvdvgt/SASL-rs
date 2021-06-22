@@ -2,7 +2,7 @@ use crate::error::SaslError;
 use crate::frontend::ast::Ast;
 use super::abstractor::Abstractor;
 
-fn compile(ast: &mut Ast) -> Result<(), SaslError> {
+pub fn compile(ast: &mut Ast) -> Result<(), SaslError> {
     for (_, (p, body)) in ast.global_defs.iter_mut() {
         // Only functions need to be freeded of parameter names
         if let Some(_) = p {
@@ -37,7 +37,7 @@ mod tests {
             def const = 5*3 \
             def rec x = if x = 0 then 0 else rec (x-1)
             def g x = f x where f x = y where y = x + 1
-            . 1 where f x = g x; g x = f x"
+            . a + 2 where a = 3"
         );
         compile(&mut ast).unwrap();
         println!("{:?}", &ast.global_defs.keys());

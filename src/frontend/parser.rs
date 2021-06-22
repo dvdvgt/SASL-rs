@@ -223,7 +223,7 @@ impl<'a> Parser<'a> {
                 self.apply3(
                     ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
                     op_expr, 
-                    Rc::clone(&list_expr)
+                    list_expr
                 )
             )
         }
