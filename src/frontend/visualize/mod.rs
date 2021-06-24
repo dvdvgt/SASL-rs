@@ -1,6 +1,7 @@
-use super::ast::{Ast, AstNode, Op, AstNodePtr};
+use super::ast::{Ast, AstNode, Op};
 use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;
+use std::rc::Rc;
 
 use std::collections::hash_map;
 use std::{
@@ -38,7 +39,7 @@ impl Visualizer {
     fn add_definition(
         &mut self,
         def_root_id: String,
-        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNodePtr)>,
+        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, Rc<AstNode>)>,
     ) {
         for (def, (params, ast_node)) in defs {
             let mut def_name = def.clone();
@@ -77,8 +78,8 @@ impl Visualizer {
     }
 
     /// Create a graph from ast_nodes.
-    pub fn visualize_ast_nodes(&mut self, nodes: &AstNodePtr) {
-        match &*nodes.borrow() {
+    pub fn visualize_ast_nodes(&mut self, nodes: &AstNode) {
+        match &nodes {
             AstNode::Empty => (),
             AstNode::Ident(x) => self.add_node(format!("Id:{}", x)),
             AstNode::Where(lhs_expr, defs) => {
@@ -102,7 +103,7 @@ impl Visualizer {
             }
             AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
             // Combinators
-            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node((*nodes.borrow()).to_string()),
+            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node(nodes.to_string()),
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
@@ -166,7 +167,7 @@ mod tests {
     use crate::frontend::lexer::Lexer;
     use crate::frontend::parser::Parser;
 
-    fn parse(input: &str) -> AstNodePtr {
+    fn parse(input: &str) -> Rc<AstNode> {
         let mut lx = Lexer::new(input);
         let tokens = lx.tokenize().unwrap().clone();
         let mut parser = Parser::new(tokens);

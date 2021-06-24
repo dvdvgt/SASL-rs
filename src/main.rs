@@ -6,7 +6,7 @@ use std::{
 
 use clap::{App, Arg, ArgMatches};
 
-use sasl::{backend::{compiler, reduction::ReductionMachine}, frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer}};
+use sasl::{backend::{compiler}, frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer}};
 
 fn main() {
     let matches = App::new("SASL-rs")
@@ -104,6 +104,8 @@ pub fn run(src: &str, args: &ArgMatches) {
     let mut expr = expr.unwrap();
     compiler::compile(&mut expr).unwrap();
     // Eval
+    /*
     let mut reductor = ReductionMachine::new(expr);
     println!("{}", reductor.reduce().unwrap());
+    */
 }

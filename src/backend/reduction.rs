@@ -102,7 +102,6 @@ impl ReductionMachine {
 
     pub fn reduce(&mut self) -> Result<AstNode, SaslError> {
         loop {
-            println!("{}", &self.ast);
             let top = self.left_ancestor_stack.last().unwrap().borrow().clone();
             match top {
                 AstNode::App(lhs, _) => self.left_ancestor_stack.push(Rc::clone(&lhs)),
@@ -155,21 +154,19 @@ impl ReductionMachine {
                 let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
                 let top = self.left_ancestor_stack.last().unwrap().clone();
                 let x = get_app_child!(rhs(top));
-                println!("hier, {}", &*top.borrow());
                 // Build (f @ x) @ (g @ x)
-                let f_at_x = AstNode::App(f, ptr!(x.borrow().clone()));
-                let g_at_x = AstNode::App(g, ptr!(x.borrow().clone()));
+                let f_at_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
+                let g_at_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
                 set_app_child_value!(lhs(top) = f_at_x);
                 set_app_child_value!(rhs(top) = g_at_x);
-                println!("hier, {}", &*top.borrow());
                 Ok(())
             }
             AstNode::K => {
                 // (K @ x) @ y ~> I @ x
-                let x = self.left_ancestor_stack.pop().unwrap();
+                let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
                 let mut top = self.left_ancestor_stack.last().unwrap().clone();
                 // Build I @ x
-                set_app_child_ptr!(rhs(&mut top) = x);
+                set_app_child_value!(rhs(&mut top) = x.borrow().clone());
                 set_app_child_value!(lhs(top) = AstNode::I);
                 Ok(())
             }

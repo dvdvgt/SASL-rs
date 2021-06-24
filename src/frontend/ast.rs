@@ -1,7 +1,7 @@
 //! Abstract syntax tree datastructures.
 //! In here are all datastructures needed for creating the AST in the parser.
 
-use std::{cell::RefCell, collections::HashMap, fmt, ops::Deref, rc::Rc};
+use std::{collections::HashMap, fmt, rc::Rc};
 
 use super::token::Type;
 use crate::ptr;
@@ -31,7 +31,6 @@ impl Def {
     }
 }
 
-pub type AstNodePtr = Rc<RefCell<AstNode>>;
 
 /// A vector of identifiers (strings) which may or may not exist depending on the
 /// type of definition. A constant definition does not have any parameters whereas
@@ -51,27 +50,27 @@ pub type Identifier = String;
 ///     the global definitions by a dot ('.') in the source code.
 #[derive(Debug, Clone)]
 pub struct Ast {
-    pub global_defs: HashMap<Identifier, (Params, AstNodePtr)>,
+    pub global_defs: HashMap<Identifier, (Params, Rc<AstNode>)>,
     //root: AstNode,
-    pub body: AstNodePtr,
+    pub body: Rc<AstNode>,
 }
 
 impl Ast {
     pub fn new() -> Self {
         Self {
             global_defs: HashMap::new(),
-            body: ptr!(AstNode::Empty),
+            body: Rc::new(AstNode::Empty),
         }
     }
 
-    pub fn lookup(&self, def: &str) -> Option<&(Params, AstNodePtr)> {
+    pub fn lookup(&self, def: &str) -> Option<&(Params, Rc<AstNode>)> {
         self.global_defs.get(def)
     }
 }
 
 impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} . {}", "defs", self.body.deref().borrow())
+        write!(f, "{} . {}", "defs", &self.body)
     }
 }
 
@@ -90,11 +89,11 @@ impl Default for Ast {
 #[derive(Debug, Clone)]
 pub enum AstNode {
     Where(
-        AstNodePtr,
-        HashMap<Identifier, (Params, AstNodePtr)>,
+        Rc<AstNode>,
+        HashMap<Identifier, (Params, Rc<AstNode>)>,
     ),
     /// Function application used for currying functions
-    App(AstNodePtr, AstNodePtr),
+    App(Rc<AstNode>, Rc<AstNode>),
     // Variable/function identifier
     Ident(String),
     // Atomics
@@ -119,9 +118,9 @@ impl fmt::Display for AstNode {
             match self {
                 //AstNode::Where(Some(expr), _, Some(nested_where)) =>
                     //format!("{} where {}", expr, nested_where),
-                AstNode::Where(expr, _) => format!("{} where", expr.deref().borrow()),
+                AstNode::Where(expr, _) => format!("{} where", expr),
                 //AstNode::Where(None, _, None) => "where".to_string(),
-                AstNode::App(ast1, ast2) => format!("({} @ {})", ast1.deref().borrow(), ast2.deref().borrow()),
+                AstNode::App(ast1, ast2) => format!("({} @ {})", ast1, ast2),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
                 AstNode::Builtin(op) => op.to_string(),
@@ -136,12 +135,12 @@ impl fmt::Display for AstNode {
     }
 }
 
-pub(crate) fn apply2(astnode1: AstNodePtr, astnode2: AstNodePtr) -> AstNodePtr {
-    ptr!(AstNode::App(astnode1, astnode2))
+pub(crate) fn apply2(astnode1: Rc<AstNode>, astnode2: Rc<AstNode>) -> Rc<AstNode> {
+    Rc::new(AstNode::App(astnode1, astnode2))
 }
 
-pub(crate) fn apply3(astnode1: AstNodePtr, astnode2: AstNodePtr, astnode3: AstNodePtr) -> AstNodePtr {
-    ptr!(AstNode::App(apply2(astnode1, astnode2), astnode3))
+pub(crate) fn apply3(astnode1: Rc<AstNode>, astnode2: Rc<AstNode>, astnode3: Rc<AstNode>) -> Rc<AstNode> {
+    Rc::new(AstNode::App(apply2(astnode1, astnode2), astnode3))
 }
 
 /// Different types of operations. In SASL there are three types:

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use super::{
-    ast::{Ast, AstNode, Def, Identifier, Op, Params, AstNodePtr},
+    ast::{Ast, AstNode, Def, Identifier, Op, Params},
     token::{Token, Type},
 };
 use crate::{
@@ -22,11 +22,11 @@ pub struct Parser<'a> {
 
 /// Represents the result of most parser functions where either a AstNode is returned or
 /// a parse error occured and Err is returned.
-type ParserResult = Result<AstNodePtr, SaslError>;
+type ParserResult = Result<Rc<AstNode>, SaslError>;
 
 /// Defs is a hashmap where each entry is a mapping of an identifier (constant or function name)
 /// to the corresponding vector of optional parameter names and the constant/function body.
-type Defs = HashMap<Identifier, (Params, AstNodePtr)>;
+type Defs = HashMap<Identifier, (Params, Rc<AstNode>)>;
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: VecDeque<Token<'a>>) -> Self {
@@ -71,13 +71,13 @@ impl<'a> Parser<'a> {
     }
 
     /// Apply an operation to one argument.
-    fn apply2(&self, astnode1: AstNodePtr, astnode2: AstNodePtr) -> AstNodePtr {
-        ptr!(AstNode::App(astnode1, astnode2))
+    fn apply2(&self, astnode1: Rc<AstNode>, astnode2: Rc<AstNode>) -> Rc<AstNode> {
+        Rc::new(AstNode::App(astnode1, astnode2))
     }
 
     /// Apply an operation to two arguments.
-    fn apply3(&self, astnode1: AstNodePtr, astnode2: AstNodePtr, astnode3: AstNodePtr) -> AstNodePtr {
-        ptr!(AstNode::App(self.apply2(astnode1, astnode2), astnode3))
+    fn apply3(&self, astnode1: Rc<AstNode>, astnode2: Rc<AstNode>, astnode3: Rc<AstNode>) -> Rc<AstNode> {
+        Rc::new(AstNode::App(self.apply2(astnode1, astnode2), astnode3))
     }
 
     /// Create a parse error with a custom error message.
@@ -159,22 +159,21 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_def(&mut self) -> Result<(Def, AstNodePtr), SaslError> {
+    fn parse_def(&mut self) -> Result<(Def, Rc<AstNode>), SaslError> {
         let name = self.parse_name()?;
-        let name = &*name.borrow();
-        match name {
+        match &*name {
             AstNode::Ident(ref n) => Ok(self.parse_abstraction(Def::new(n.clone(), None))?),
             _ => Err(self.parse_err("Expected identifier for definition.")),
         }
     }
     // TODO add error handling!!!
-    fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, AstNodePtr), SaslError> {
+    fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, Rc<AstNode>), SaslError> {
         if self.expect_type(T![=]) {
             self.consume(&T![=]);
             let expr = self.parse_expr().unwrap();
             Ok((def, expr))
         } else {
-            if let AstNode::Ident(ref name) = &*(self.parse_name()?).borrow() {
+            if let AstNode::Ident(ref name) = &*self.parse_name()? {
                 def.add_new_parameter(name);
             }
             self.parse_abstraction(def)
@@ -186,11 +185,11 @@ impl<'a> Parser<'a> {
         self.parse_expr1(cond_expr)
     }
 
-    fn parse_expr1(&mut self, expr: AstNodePtr) -> ParserResult {
+    fn parse_expr1(&mut self, expr: Rc<AstNode>) -> ParserResult {
         if self.expect_type(T![where]) {
             self.consume(&T![where]).pos;
             let defs = self.parse_defs()?;
-            let where_expr = ptr!(AstNode::Where(expr, defs));
+            let where_expr = Rc::new(AstNode::Where(expr, defs));
             self.parse_expr1(where_expr)
         } else {
             Ok(expr)
@@ -206,7 +205,7 @@ impl<'a> Parser<'a> {
             self.consume(&T![else]);
             let else_expr = self.parse_condexpr()?;
             Ok(self.apply2(
-                self.apply3(ptr!(AstNode::Builtin(Op::Cond)), predicate, then_expr),
+                self.apply3(Rc::new(AstNode::Builtin(Op::Cond)), predicate, then_expr),
                 else_expr,
             ))
         } else {
@@ -217,11 +216,11 @@ impl<'a> Parser<'a> {
     fn parse_listexpr(&mut self) -> ParserResult {
         let op_expr = self.parse_opexpr()?;
         let list_expr = self.parse_listexpr1()?;
-        match &*list_expr.clone().borrow(){
+        match &*list_expr {
             AstNode::Empty => Ok(op_expr),
             _ => Ok(
                 self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
+                    Rc::new(AstNode::Builtin(Op::InfixOp(T![:]))),
                     op_expr, 
                     list_expr
                 )
@@ -234,7 +233,7 @@ impl<'a> Parser<'a> {
             self.consume(&T![:]);
             self.parse_listexpr()
         } else {
-            Ok(ptr!(AstNode::Empty))
+            Ok(Rc::new(AstNode::Empty))
         }
     }
 
@@ -243,12 +242,12 @@ impl<'a> Parser<'a> {
         self.parse_opexpr1(lhs)
     }
 
-    fn parse_opexpr1(&mut self, lhs: AstNodePtr) -> ParserResult {
+    fn parse_opexpr1(&mut self, lhs: Rc<AstNode>) -> ParserResult {
         if self.expect_type(T![or]) {
             self.consume(&T![or]);
             let conjunct = self.parse_conjunct()?;
             let lhs1 = self.apply3(
-                ptr!(AstNode::Builtin(Op::InfixOp(T![or]))), 
+                Rc::new(AstNode::Builtin(Op::InfixOp(T![or]))), 
                 lhs, 
                 conjunct
             );
@@ -262,12 +261,12 @@ impl<'a> Parser<'a> {
         let lhs = self.parse_compar()?;
         self.parse_conjunct1(lhs)
     }
-    fn parse_conjunct1(&mut self, lhs: AstNodePtr) -> ParserResult {
+    fn parse_conjunct1(&mut self, lhs: Rc<AstNode>) -> ParserResult {
         if self.expect_type(T![and]) {
             self.consume(&T![and]);
             let compar = self.parse_compar()?;
             let lhs1 = self.apply3(
-                ptr!(AstNode::Builtin(Op::InfixOp(T![and]))), 
+                Rc::new(AstNode::Builtin(Op::InfixOp(T![and]))), 
                 lhs, 
                 compar
             );
@@ -282,7 +281,7 @@ impl<'a> Parser<'a> {
         self.parse_compar1(lhs)
     }
 
-    fn parse_compar1(&mut self, lhs: AstNodePtr) -> ParserResult {
+    fn parse_compar1(&mut self, lhs: Rc<AstNode>) -> ParserResult {
         match self.peek() {
             T![=] | T![~=] | T![<] | T![>] | T![<=] | T![>=] => {
                 let op = self.parse_relop()?;
@@ -299,13 +298,13 @@ impl<'a> Parser<'a> {
         self.parse_add1(rhs)
     }
 
-    fn parse_add1(&mut self, rhs: AstNodePtr) -> ParserResult {
+    fn parse_add1(&mut self, rhs: Rc<AstNode>) -> ParserResult {
         match self.peek() {
             T![+] | T![-] => {
                 let op = self.next().unwrap().typ;
                 let mul = self.parse_mul()?;
                 let rhs1 = self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(op))),
+                    Rc::new(AstNode::Builtin(Op::InfixOp(op))),
                     rhs,
                     mul,
                 );
@@ -320,13 +319,13 @@ impl<'a> Parser<'a> {
         self.parse_mul1(rhs)
     }
 
-    fn parse_mul1(&mut self, rhs: AstNodePtr) -> ParserResult {
+    fn parse_mul1(&mut self, rhs: Rc<AstNode>) -> ParserResult {
         match self.peek() {
             T![*] | T![/] => {
                 let op = self.next().unwrap().typ;
                 let factor = self.parse_factor()?;
                 let rhs1 = self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(op))),
+                    Rc::new(AstNode::Builtin(Op::InfixOp(op))),
                     rhs,
                     factor
                 );
@@ -341,7 +340,7 @@ impl<'a> Parser<'a> {
             T![+] | T![-] | T![not] => {
                 let prefix = self.next().unwrap().typ;
                 let comb = self.parse_comb()?;
-                Ok(self.apply2(ptr!(AstNode::Builtin(Op::PrefixOp(prefix))), comb))
+                Ok(self.apply2(Rc::new(AstNode::Builtin(Op::PrefixOp(prefix))), comb))
             }
             _ => self.parse_comb(),
         }
@@ -352,7 +351,7 @@ impl<'a> Parser<'a> {
         self.parse_comb1(simple)
     }
 
-    fn parse_comb1(&mut self, lhs: AstNodePtr) -> ParserResult {
+    fn parse_comb1(&mut self, lhs: Rc<AstNode>) -> ParserResult {
         match self.peek() {
             T![head]
             | T![tail]
@@ -362,7 +361,8 @@ impl<'a> Parser<'a> {
             | T!['[']
             | T!['(']
             | T![ident] => {
-                let lhs1 = ptr!(AstNode::App(lhs, self.parse_simple()?));
+                let simple = self.parse_simple()?;
+                let lhs1 = self.apply2(lhs, simple);
                 self.parse_comb1(lhs1)
             }
             _ => Ok(lhs),
@@ -406,7 +406,7 @@ impl<'a> Parser<'a> {
     fn parse_name(&mut self) -> ParserResult {
         if self.peek() == &T![ident] {
             let id_name = self.next().unwrap().lexeme.to_string();
-            Ok(ptr!(AstNode::Ident(id_name)))
+            Ok(Rc::new(AstNode::Ident(id_name)))
         } else {
             let token = self.next().unwrap();
             Err(self.token_parse_err(token, "Expected identifier."))
@@ -417,7 +417,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![head] | T![tail] => {
                 let op = self.next().unwrap().typ;
-                Ok(ptr!(AstNode::Builtin(Op::PrefixOp(op))))
+                Ok(Rc::new(AstNode::Builtin(Op::PrefixOp(op))))
             }
             _ => {
                 let token = self.next().unwrap();
@@ -429,9 +429,9 @@ impl<'a> Parser<'a> {
     fn parse_constant(&mut self) -> ParserResult {
         match self.peek() {
             Type::Number(_) | Type::String(_) | Type::Boolean(_) => {
-                Ok(ptr!(AstNode::Constant(self.next().unwrap().typ)))
+                Ok(Rc::new(AstNode::Constant(self.next().unwrap().typ)))
             }
-            T![nil] => Ok(ptr!(AstNode::Constant(self.consume(&T![nil]).typ))),
+            T![nil] => Ok(Rc::new(AstNode::Constant(self.consume(&T![nil]).typ))),
             T!['['] => {
                 self.consume(&T!['[']);
                 self.parse_list1()
@@ -447,7 +447,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![']'] => {
                 self.consume(&T![']']);
-                Ok(ptr!(AstNode::Constant(T![nil])))
+                Ok(Rc::new(AstNode::Constant(T![nil])))
             }
             _ => {
                 let list_elems = self.parse_listelems()?;
@@ -468,10 +468,11 @@ impl<'a> Parser<'a> {
     fn parse_listelems(&mut self) -> ParserResult {
         let expr = self.parse_expr()?;
         let list_app = self.apply2(
-            ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
+            Rc::new(AstNode::Builtin(Op::InfixOp(T![:]))),
             expr
         );
-        Ok(ptr!(AstNode::App(list_app, self.parse_listelems1()?)))
+        let list_elems = self.parse_listelems1()?;
+        Ok(self.apply2(list_app, list_elems))
     }
 
     fn parse_listelems1(&mut self) -> ParserResult {
@@ -480,14 +481,15 @@ impl<'a> Parser<'a> {
                 self.consume(&T![,]);
                 let expr = self.parse_expr()?;
                 let list_app = self.apply2(
-                    ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
+                    Rc::new(AstNode::Builtin(Op::InfixOp(T![:]))),
                     expr
                 );
+                let list_elems = self.parse_listelems1()?;
                 Ok(
-                    ptr!(AstNode::App(list_app, self.parse_listelems1()?))
+                    self.apply2(list_app, list_elems)
                 )
             }
-            _ => Ok(ptr!(AstNode::Constant(T![nil])))
+            _ => Ok(Rc::new(AstNode::Constant(T![nil])))
         }
     }
 
@@ -495,7 +497,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![-] | T![+] | T![not] => {
                 let token = self.next().unwrap();
-                Ok(ptr!(AstNode::Builtin(Op::PrefixOp(token.typ))))
+                Ok(Rc::new(AstNode::Builtin(Op::PrefixOp(token.typ))))
             }
             _ => {
                 let token = self.next().unwrap();
@@ -514,7 +516,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![+] | T![-] => {
                 let token = self.next().unwrap();
-                Ok(ptr!(AstNode::Builtin(Op::InfixOp(token.typ))))
+                Ok(Rc::new(AstNode::Builtin(Op::InfixOp(token.typ))))
             }
             _ => {
                 let token = self.next().unwrap();
@@ -530,7 +532,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![*] | T![/] => {
                 let op = self.next().unwrap().typ;
-                Ok(ptr!(AstNode::Builtin(Op::InfixOp(op))))
+                Ok(Rc::new(AstNode::Builtin(Op::InfixOp(op))))
             }
             _ => {
                 let token = self.next().unwrap();
@@ -546,7 +548,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             T![=] | T![~=] | T![<] | T![>] | T![<=] | T![>=] => {
                 let op = self.next().unwrap().typ;
-                Ok(ptr!(AstNode::Builtin(Op::InfixOp(op))))
+                Ok(Rc::new(AstNode::Builtin(Op::InfixOp(op))))
             }
             _ => {
                 let token = self.next().unwrap();
@@ -564,12 +566,10 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use super::*;
     use crate::frontend::lexer::Lexer;
 
-    fn parse_expr(input: &str) -> AstNodePtr {
+    fn parse_expr(input: &str) -> Rc<AstNode> {
         let mut lx = Lexer::new(input);
         let tokens = lx.tokenize().unwrap().clone();
         let mut parser = Parser::new(tokens);
@@ -587,17 +587,17 @@ mod tests {
     fn test_parse_basic_epxr() {
         let expr = parse_expr("[1,2,\"ab\", true, 5.6, id]");
         assert_eq!(
-            expr.deref().borrow().to_string(), 
+            expr.to_string(), 
             "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ Id:id) @ nil))))))"
         );
         let expr = parse_expr("1.2 + 2 * 3 - 4 / 5");
         assert_eq!(
-            expr.deref().borrow().to_string(),
+            expr.to_string(),
             "((- @ ((+ @ Number:1.2) @ ((* @ Number:2) @ Number:3))) @ ((/ @ Number:4) @ Number:5))"
         );
         let expr = parse_expr("if [1,true,\"a\"] = nil then 1.5 else -2.5");
         assert_eq!(
-            expr.deref().borrow().to_string(),
+            expr.to_string(),
             "(((cond @ ((= @ ((: @ Number:1) @ ((: @ Boolean:true) @ ((: @ String:a) @ nil)))) @ nil)) @ Number:1.5) @ (- @ Number:2.5))"
         );
     }
@@ -617,20 +617,20 @@ mod tests {
             params: None,
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ Number:5) @ Number:2)");
+        assert_eq!(astnode.to_string(), "((+ @ Number:5) @ Number:2)");
 
         let def = &Def {
             name: "b".to_string(),
             params: Some(vec!["x".to_string()]),
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((* @ (- @ Number:2.3)) @ Id:x)");
+        assert_eq!(astnode.to_string(), "((* @ (- @ Number:2.3)) @ Id:x)");
 
         let def = &Def {
             name: "plus".to_string(),
             params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()]),
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)");
+        assert_eq!(astnode.to_string(), "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)");
     }
 }
