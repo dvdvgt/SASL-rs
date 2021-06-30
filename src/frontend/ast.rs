@@ -103,6 +103,7 @@ pub enum AstNode {
     Builtin(Op),
     // Empty expression
     Empty,
+    Pair(AstNodePtr ,AstNodePtr),
     // Combinators
     S,
     K,
@@ -124,6 +125,7 @@ impl fmt::Display for AstNode {
                 AstNode::App(ast1, ast2) => format!("({} @ {})", ast1.deref().borrow(), ast2.deref().borrow()),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
+	        AstNode::Pair(a,b) => format!("({} @ {})", a.deref().borrow(), b.deref().borrow()),
                 AstNode::Builtin(op) => op.to_string(),
                 AstNode::Empty => "empty".to_string(),
                 AstNode::S => "S".to_string(),
