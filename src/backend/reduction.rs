@@ -18,6 +18,21 @@ macro_rules! get_app_child {
     }
 }
 
+macro_rules! get_pair_child {
+	(rhs($node:expr)) => {
+	  match &*$node.borrow() {
+	   AstNode::Pair(_,rhs) => Rc::clone(rhs),
+	   _ => panic!()
+	  }
+	};
+	(lhs($node:expr)) => {
+	  match &*$node.borrow() {
+	   AstNode::Pair(lhs,_) => Rc::clone(lhs),
+	   _ => panic!()
+	  }
+	}
+}
+
 macro_rules! set_app_child_value {
     ( rhs($app_node:expr) = $node:expr ) => {
         if let AstNode::App(_, rhs) = &*$app_node.borrow() {
@@ -109,6 +124,9 @@ impl ReductionMachine {
                 AstNode::S
                 | AstNode::K
                 | AstNode::I
+		| AstNode::Y
+		| AstNode::U
+	        | AstNode::Ident(_)
                 | AstNode::Builtin(_) => {
                     self.reduce_builtin()?;
                     ()
@@ -143,47 +161,89 @@ impl ReductionMachine {
             | AstNode::Builtin(Op::InfixOp(op @ T![>]))
             | AstNode::Builtin(Op::InfixOp(op @ T![>=])) 
             | AstNode::Builtin(Op::InfixOp(op @ T![and]))
-            | AstNode::Builtin(Op::InfixOp(op @ T![or])) => self.eval_binary(&op),
-            AstNode::Builtin(Op::Cond) => todo!("eval cond"),
-            AstNode::Builtin(Op::PrefixOp(T![not])) => self.eval_unary(),
-            AstNode::Builtin(Op::InfixOp(T![:])) => todo!(),
-            AstNode::Builtin(Op::PrefixOp(T![head])) => todo!(),
-            AstNode::Builtin(Op::PrefixOp(T![tail])) => todo!(),
-            AstNode::S => {
-                // S @ f @ g @ x ~> (f @ x) @ (g @ x)
-                let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
-                let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
-                let top = self.left_ancestor_stack.last().unwrap().clone();
-                let x = get_app_child!(rhs(top));
-                println!("hier, {}", &*top.borrow());
-                // Build (f @ x) @ (g @ x)
-                let f_at_x = AstNode::App(f, ptr!(x.borrow().clone()));
-                let g_at_x = AstNode::App(g, ptr!(x.borrow().clone()));
-                set_app_child_value!(lhs(top) = f_at_x);
-                set_app_child_value!(rhs(top) = g_at_x);
-                println!("hier, {}", &*top.borrow());
-                Ok(())
-            }
-            AstNode::K => {
-                // (K @ x) @ y ~> I @ x
-                let x = self.left_ancestor_stack.pop().unwrap();
-                let mut top = self.left_ancestor_stack.last().unwrap().clone();
-                // Build I @ x
-                set_app_child_ptr!(rhs(&mut top) = x);
-                set_app_child_value!(lhs(top) = AstNode::I);
-                Ok(())
-            }
-            AstNode::I => {
-                // I @ x ~> x
-                let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
-                self.left_ancestor_stack.push(x);
-                Ok(())
-            }
-            _ => todo!()
-        }
-    }
+            | AstNode::Builtin(Op::InfixOp(op @ T![or])) => self.reduce_binary(&op),
+            AstNode::Builtin(Op::Cond) => self.reduce_cond(),
+            AstNode::Builtin(Op::PrefixOp(T![not])) => self.reduce_unary(),
+            AstNode::Builtin(Op::InfixOp(T![:])) => self.reduce_cons(),
+            AstNode::Builtin(Op::PrefixOp(T![head])) => self.reduce_hd(),
+            AstNode::Builtin(Op::PrefixOp(T![tail])) => self.reduce_tl(),
+	    AstNode::Ident(s) => self.reduce_global_defs(s),
+            AstNode::S => self.reduce_S(),
+	    AstNode::K => self.reduce_K(),
+	    AstNode::I => self.reduce_I(),
+	    AstNode::Y => todo!(),//self.reduce_Y(),
+	    AstNode::U => self.reduce_U(),
+	    _ => todo!()
+	  }
+	     
+	}
+	
+	fn reduce_Y(&mut self) -> Result<(),SaslError> {
+	// f @ (Y @ f)
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let f = get_app_child!(rhs(top)).deref().borrow().clone();
 
-    fn eval_binary(&mut self, op: &Type) -> Result<(), SaslError> {
+	
+	let y_and_f = AstNode::App(ptr!(AstNode::Y), ptr!(f.clone()));
+	set_app_child_value!(rhs(top) = y_and_f);
+	//noch Probleme bei den Rechten erwartet Refcell<_> ist aber Rc<Refcell<_>>
+	set_app_child_value!(lhs(top) = f);
+	
+	Ok(())
+	}
+	
+	fn reduce_U(&mut self) -> Result<(),SaslError> {
+	// (f @ (hd @ z)) @ (tl @ z)
+	let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let z = get_app_child!(rhs(top));
+	println!("hier,{}", &*top.borrow());
+
+	let hd_and_z =  AstNode::App(ptr!(AstNode::Builtin(Op::PrefixOp(T![head]))), ptr!(z.borrow().clone()));
+	let tl_and_z =  AstNode::App(ptr!(AstNode::Builtin(Op::PrefixOp(T![tail]))), ptr!(z.borrow().clone()));
+	let f_hd_and_z = AstNode::App(f,ptr!(hd_and_z));
+	set_app_child_value!(lhs(top) = f_hd_and_z);
+	set_app_child_value!(rhs(top) = tl_and_z);
+	Ok(())
+	}
+
+
+	fn reduce_S(&mut self) -> Result<(), SaslError> {
+	// (f @ x) @ (g @ x)
+	let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let x = get_app_child!(rhs(top));
+	println!("hier,{}", &*top.borrow());
+
+	//build
+	let f_and_x = AstNode::App(f, ptr!(x.borrow().clone()));
+	let g_and_x = AstNode::App(g, ptr!(x.borrow().clone())); 
+	set_app_child_value!(lhs(top) = f_and_x);
+	set_app_child_value!(rhs(top) = g_and_x);
+	println!("hier, {}", &*top.borrow());
+	Ok(())
+	}
+	
+	 fn reduce_K(&mut self) -> Result<(),SaslError> {
+	//I @ x
+	let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	let mut top = self.left_ancestor_stack.last().unwrap().clone();
+	//Build
+	set_app_child_ptr!(rhs(&mut top) = x);
+	set_app_child_value!(lhs(top) = AstNode::I);
+	Ok(())
+	}
+
+	pub fn reduce_I(&mut self) -> Result<(),SaslError> {
+	//x
+	let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	self.left_ancestor_stack.push(x);
+	Ok(())
+	
+	}
+
+    fn reduce_binary(&mut self, op: &Type) -> Result<(), SaslError> {
         let lhs = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let rhs = get_app_child!(rhs(top));
@@ -201,6 +261,7 @@ impl ReductionMachine {
         if check_type!(&lhs; number) && check_type!(&rhs; number) {
             let num_lhs = get_const_val!(lhs; number);
             let num_rhs = get_const_val!(rhs; number);
+
             match op {
                 T![+] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Number(num_lhs + num_rhs))),
                 T![-] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Number(num_lhs - num_rhs))),
@@ -225,13 +286,13 @@ impl ReductionMachine {
                 T![or] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(bool_lhs || bool_rhs))),
                 _ => todo!()
             }
-        }
+        } 
         // Eval comparions with Nil!
         
         Ok(())
     } 
 
-    fn eval_unary(&mut self) -> Result<(), SaslError> {
+    fn reduce_unary(&mut self) -> Result<(), SaslError> {
         // (not @ bool) ? not already borrowed !!
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let rhs = get_app_child!(rhs(top));
@@ -250,6 +311,81 @@ impl ReductionMachine {
         }
     }
 
+
+   fn reduce_cond(&mut self) -> Result<(), SaslError> {
+        let boo = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+        let top = self.left_ancestor_stack.last().unwrap().clone();
+        let x = get_app_child!(rhs(top));
+
+        self.left_ancestor_stack.push(boo);
+        self.reduce()?;
+        let boo = self.left_ancestor_stack.pop().unwrap();
+
+        self.left_ancestor_stack.push(x);
+        self.reduce()?;
+        let x = self.left_ancestor_stack.pop().unwrap();
+	
+	if get_const_val!(boo; boolean) {
+	//condition is true
+	set_app_child_value!(lhs(top) = AstNode::I);
+	set_app_child_ptr!(rhs(top) = x);
+	} else {
+	//condition is false
+	self.left_ancestor_stack.pop().unwrap();
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let y = get_app_child!(rhs(top));
+	//self.left_ancestor_stack.push(y);
+        //self.reduce()?;
+        //let y = self.left_ancestor_stack.pop().unwrap();
+
+        set_app_child_value!(lhs(top) = AstNode::I);
+	set_app_child_ptr!(rhs(top) = y);
+	}
+	Ok(())
+   }
+	
+   fn reduce_hd(&mut self) -> Result<(),SaslError> {
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	
+	// get pair child and 
+	let x =  get_pair_child!(lhs(top)) ;
+	set_app_child_ptr!(rhs(top) = x);
+	set_app_child_value!(lhs(top) = AstNode::I);
+	
+	Ok(())
+   }
+	
+   fn reduce_tl(&mut self) -> Result<(),SaslError> {
+	
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	
+	
+	let x =  get_pair_child!(rhs(top)) ;
+	set_app_child_ptr!(rhs(top) = x);
+	set_app_child_value!(lhs(top) = AstNode::I);
+	
+	Ok(())
+   }
+
+  fn reduce_cons(&mut self) -> Result<(),SaslError> {
+	let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let y = get_app_child!(rhs(top));
+	// I @ Pair(x,y)
+	set_app_child_value!(lhs(top) = AstNode::I);
+	set_app_child_value!(rhs(top) = AstNode::Pair(x,y));	
+	Ok(())
+
+   }
+ 
+  fn reduce_global_defs(&mut self, s : String) -> Result<(), SaslError> {
+	let top = self.left_ancestor_stack.last().unwrap().clone();
+	//look into Hashmap
+        let x = self.ast.global_defs.get(&s).unwrap_or_else(||panic!()).1.deref().borrow().clone();
+	set_app_child_value!(lhs(top) = x);  
+        Ok(())
+	
+  }
 
 }
 
