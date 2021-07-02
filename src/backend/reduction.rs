@@ -118,6 +118,7 @@ impl ReductionMachine {
     pub fn reduce(&mut self) -> Result<AstNode, SaslError> {
         loop {
             println!("{}", &self.ast);
+	    println!("stack,{}", &self.left_ancestor_stack.last().unwrap().borrow().clone());
             let top = self.left_ancestor_stack.last().unwrap().borrow().clone();
             match top {
                 AstNode::App(lhs, _) => self.left_ancestor_stack.push(Rc::clone(&lhs)),
@@ -171,7 +172,7 @@ impl ReductionMachine {
             AstNode::S => self.reduce_S(),
 	    AstNode::K => self.reduce_K(),
 	    AstNode::I => self.reduce_I(),
-	    AstNode::Y => todo!(),//self.reduce_Y(),
+	    AstNode::Y => self.reduce_Y(),
 	    AstNode::U => self.reduce_U(),
 	    _ => todo!()
 	  }
@@ -217,8 +218,8 @@ impl ReductionMachine {
 	println!("hier,{}", &*top.borrow());
 
 	//build
-	let f_and_x = AstNode::App(f, ptr!(x.borrow().clone()));
-	let g_and_x = AstNode::App(g, ptr!(x.borrow().clone())); 
+	let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
+	let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone())); 
 	set_app_child_value!(lhs(top) = f_and_x);
 	set_app_child_value!(rhs(top) = g_and_x);
 	println!("hier, {}", &*top.borrow());
@@ -228,9 +229,11 @@ impl ReductionMachine {
 	 fn reduce_K(&mut self) -> Result<(),SaslError> {
 	//I @ x
 	let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+	//self.left_ancestor_stack.pop();
 	let mut top = self.left_ancestor_stack.last().unwrap().clone();
 	//Build
-	set_app_child_ptr!(rhs(&mut top) = x);
+	
+	set_app_child_value!(rhs(&mut top) = (x.borrow().clone()));
 	set_app_child_value!(lhs(top) = AstNode::I);
 	Ok(())
 	}
@@ -244,10 +247,12 @@ impl ReductionMachine {
 	}
 
     fn reduce_binary(&mut self, op: &Type) -> Result<(), SaslError> {
-        let lhs = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+ 	//println!("stack,{}", &self.left_ancestor_stack.last().unwrap().borrow().clone());
+        let lhs = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));  
+	//println!("stack,{}", &self.left_ancestor_stack.last().unwrap().borrow().clone());
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let rhs = get_app_child!(rhs(top));
-
+         
         self.left_ancestor_stack.push(lhs);
         self.reduce()?;
         let lhs = self.left_ancestor_stack.pop().unwrap();
@@ -286,9 +291,10 @@ impl ReductionMachine {
                 T![or] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(bool_lhs || bool_rhs))),
                 _ => todo!()
             }
-        } 
+        }
         // Eval comparions with Nil!
         
+
         Ok(())
     } 
 
@@ -315,20 +321,17 @@ impl ReductionMachine {
    fn reduce_cond(&mut self) -> Result<(), SaslError> {
         let boo = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
-        let x = get_app_child!(rhs(top));
+       
 
         self.left_ancestor_stack.push(boo);
         self.reduce()?;
         let boo = self.left_ancestor_stack.pop().unwrap();
 
-        self.left_ancestor_stack.push(x);
-        self.reduce()?;
-        let x = self.left_ancestor_stack.pop().unwrap();
+       
 	
 	if get_const_val!(boo; boolean) {
 	//condition is true
 	set_app_child_value!(lhs(top) = AstNode::I);
-	set_app_child_ptr!(rhs(top) = x);
 	} else {
 	//condition is false
 	self.left_ancestor_stack.pop().unwrap();
@@ -339,7 +342,7 @@ impl ReductionMachine {
         //let y = self.left_ancestor_stack.pop().unwrap();
 
         set_app_child_value!(lhs(top) = AstNode::I);
-	set_app_child_ptr!(rhs(top) = y);
+	
 	}
 	Ok(())
    }
@@ -349,7 +352,7 @@ impl ReductionMachine {
 	
 	// get pair child and 
 	let x =  get_pair_child!(lhs(top)) ;
-	set_app_child_ptr!(rhs(top) = x);
+	set_app_child_value!(rhs(top) = x.borrow().clone());
 	set_app_child_value!(lhs(top) = AstNode::I);
 	
 	Ok(())
@@ -361,7 +364,7 @@ impl ReductionMachine {
 	
 	
 	let x =  get_pair_child!(rhs(top)) ;
-	set_app_child_ptr!(rhs(top) = x);
+	set_app_child_value!(rhs(top) = x.borrow().clone());
 	set_app_child_value!(lhs(top) = AstNode::I);
 	
 	Ok(())
@@ -372,6 +375,7 @@ impl ReductionMachine {
 	let top = self.left_ancestor_stack.last().unwrap().clone();
 	let y = get_app_child!(rhs(top));
 	// I @ Pair(x,y)
+	println!("dort, {}", &*top.borrow());
 	set_app_child_value!(lhs(top) = AstNode::I);
 	set_app_child_value!(rhs(top) = AstNode::Pair(x,y));	
 	Ok(())
