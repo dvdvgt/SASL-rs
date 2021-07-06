@@ -75,7 +75,7 @@ macro_rules! check_type {
         }
     };
     ($nodeptr:expr; nil) => {
-        if let AstNode::Constant(Type::Nil(_)) = &*$nodeptr.borrow() {
+        if let AstNode::Constant(Type::Nil) = &*$nodeptr.borrow() {
             true
         } else {
             false
@@ -290,9 +290,25 @@ impl ReductionMachine {
                 T![and] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(bool_lhs && bool_rhs))),
                 T![or] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(bool_lhs || bool_rhs))),
                 _ => todo!()
-            }
-        }
-        // Eval comparions with Nil!
+          } 
+	// Eval comparions with Nil!
+        } else if check_type!(&lhs; nil) && check_type!(&rhs; nil) {
+ 	  
+	match op{
+	T![=] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(true))),
+	T![~=] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(false))),
+	_ => todo!()//self.throw_compile_err("This Operation ist not possible on Nil")
+	    }
+	
+	}else if check_type!(&lhs; nil) || check_type!(&rhs; nil) {
+	match op{
+	T![=] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(false))),
+	T![~=] => set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(true))),
+	_ => todo!()//self.throw_compile_err("This Operation ist not possible on Nil")
+	    }
+	 
+	}
+        
         
 
         Ok(())
@@ -337,9 +353,6 @@ impl ReductionMachine {
 	self.left_ancestor_stack.pop().unwrap();
 	let top = self.left_ancestor_stack.last().unwrap().clone();
 	let y = get_app_child!(rhs(top));
-	//self.left_ancestor_stack.push(y);
-        //self.reduce()?;
-        //let y = self.left_ancestor_stack.pop().unwrap();
 
         set_app_child_value!(lhs(top) = AstNode::I);
 	
@@ -350,8 +363,15 @@ impl ReductionMachine {
    fn reduce_hd(&mut self) -> Result<(),SaslError> {
 	let top = self.left_ancestor_stack.last().unwrap().clone();
 	
-	// get pair child and 
-	let x =  get_pair_child!(lhs(top)) ;
+	let pair = get_app_child!(rhs(top));
+	
+	// get left pair child 
+	self.left_ancestor_stack.push(pair);
+        self.reduce()?;
+        let pair = self.left_ancestor_stack.pop().unwrap();
+	
+	
+	let x = get_pair_child!(lhs(pair));
 	set_app_child_value!(rhs(top) = x.borrow().clone());
 	set_app_child_value!(lhs(top) = AstNode::I);
 	
@@ -361,10 +381,16 @@ impl ReductionMachine {
    fn reduce_tl(&mut self) -> Result<(),SaslError> {
 	
 	let top = self.left_ancestor_stack.last().unwrap().clone();
+	let pair = get_app_child!(rhs(top));
+	//
+	self.left_ancestor_stack.push(pair);
+        self.reduce()?;
+        let pair = self.left_ancestor_stack.pop().unwrap();
+	let x = get_pair_child!(lhs(pair));
 	
-	
-	let x =  get_pair_child!(rhs(top)) ;
+	let x = get_pair_child!(rhs(top)) ;
 	set_app_child_value!(rhs(top) = x.borrow().clone());
+	
 	set_app_child_value!(lhs(top) = AstNode::I);
 	
 	Ok(())
@@ -376,9 +402,13 @@ impl ReductionMachine {
 	let y = get_app_child!(rhs(top));
 	// I @ Pair(x,y)
 	println!("dort, {}", &*top.borrow());
+	println!("dort, {}", &*x.borrow());
+	println!("dort, {}", &*y.borrow());
+	
 	set_app_child_value!(lhs(top) = AstNode::I);
 	set_app_child_value!(rhs(top) = AstNode::Pair(x,y));	
 	Ok(())
+
 
    }
  
@@ -390,6 +420,40 @@ impl ReductionMachine {
         Ok(())
 	
   }
+
+}
+	
+#[cfg(test)]
+mod tests {
+	use std::ops::Deref;
+
+	use super::*;
+	use carte::frontend::{lexer::*, parser::*,};
+
+  fn compile_to_ast(code: &str) -> Ast{
+	Compiler::new(Parser::new(Lexer::new(code).tokenize().unwrap()))
+	  .compile()
+	  .unwrap()
+	}
+
+#[test]
+fn test_check_reduction(){
+	let mut ast = compile_to_ast(
+	"def incr x = 1 + x . incr 3 \
+	 def err x = if x > 2 then true else err x+1 . err 0 \
+	 def test = if 12 > 12-0 then true else false"
+	);
+	reduce(&mut ast).unwrap();
+	
+	assert_eq!(ast.global_defs.get("incr").unwrap().1.deref().borrow().to_string(),
+	            "4");
+	assert_eq!(ast.global_defs.get("err").unwrap().1.deref().borrow().to_string(),
+	            "true");
+	assert_eq!(ast.global_defs.get("test").unwrap().1.deref().borrow().to_string(),
+	            "false");
+
+	}
+
 
 }
 
