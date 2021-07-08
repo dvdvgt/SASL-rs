@@ -6,7 +6,10 @@ use std::{
 
 use clap::{App, Arg, ArgMatches};
 
-use sasl::{backend::{compiler, reduction::ReductionMachine}, frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer}};
+use sasl::{
+    backend::{compiler, reduction::ReductionMachine},
+    frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer},
+};
 
 fn main() {
     let matches = App::new("SASL-rs")

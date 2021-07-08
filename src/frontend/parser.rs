@@ -1,17 +1,16 @@
 //! Recursive descent parser implementation.
 
+use std::cell::RefCell;
 use std::collections::{hash_map::HashMap, VecDeque};
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use super::{
-    ast::{Ast, AstNode, Def, Identifier, Op, Params, AstNodePtr},
+    ast::{Ast, AstNode, AstNodePtr, Def, Identifier, Op, Params},
     token::{Token, Type},
 };
 use crate::{
     error::SaslError::{self, ParseError},
-    T,
-    ptr
+    ptr, T,
 };
 
 /// The `Parser` struct is repsonsible for parsing a vector tokens to the intermediate AST
@@ -76,7 +75,12 @@ impl<'a> Parser<'a> {
     }
 
     /// Apply an operation to two arguments.
-    fn apply3(&self, astnode1: AstNodePtr, astnode2: AstNodePtr, astnode3: AstNodePtr) -> AstNodePtr {
+    fn apply3(
+        &self,
+        astnode1: AstNodePtr,
+        astnode2: AstNodePtr,
+        astnode3: AstNodePtr,
+    ) -> AstNodePtr {
         ptr!(AstNode::App(self.apply2(astnode1, astnode2), astnode3))
     }
 
@@ -217,15 +221,13 @@ impl<'a> Parser<'a> {
     fn parse_listexpr(&mut self) -> ParserResult {
         let op_expr = self.parse_opexpr()?;
         let list_expr = self.parse_listexpr1()?;
-        match &*list_expr.clone().borrow(){
+        match &*list_expr.clone().borrow() {
             AstNode::Empty => Ok(op_expr),
-            _ => Ok(
-                self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
-                    op_expr, 
-                    list_expr
-                )
-            )
+            _ => Ok(self.apply3(
+                ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
+                op_expr,
+                list_expr,
+            )),
         }
     }
 
@@ -247,11 +249,7 @@ impl<'a> Parser<'a> {
         if self.expect_type(T![or]) {
             self.consume(&T![or]);
             let conjunct = self.parse_conjunct()?;
-            let lhs1 = self.apply3(
-                ptr!(AstNode::Builtin(Op::InfixOp(T![or]))), 
-                lhs, 
-                conjunct
-            );
+            let lhs1 = self.apply3(ptr!(AstNode::Builtin(Op::InfixOp(T![or]))), lhs, conjunct);
             self.parse_opexpr1(lhs1)
         } else {
             Ok(lhs)
@@ -266,11 +264,7 @@ impl<'a> Parser<'a> {
         if self.expect_type(T![and]) {
             self.consume(&T![and]);
             let compar = self.parse_compar()?;
-            let lhs1 = self.apply3(
-                ptr!(AstNode::Builtin(Op::InfixOp(T![and]))), 
-                lhs, 
-                compar
-            );
+            let lhs1 = self.apply3(ptr!(AstNode::Builtin(Op::InfixOp(T![and]))), lhs, compar);
             self.parse_conjunct1(lhs1)
         } else {
             Ok(lhs)
@@ -304,11 +298,7 @@ impl<'a> Parser<'a> {
             T![+] | T![-] => {
                 let op = self.next().unwrap().typ;
                 let mul = self.parse_mul()?;
-                let rhs1 = self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(op))),
-                    rhs,
-                    mul,
-                );
+                let rhs1 = self.apply3(ptr!(AstNode::Builtin(Op::InfixOp(op))), rhs, mul);
                 self.parse_add1(rhs1)
             }
             _ => Ok(rhs),
@@ -325,11 +315,7 @@ impl<'a> Parser<'a> {
             T![*] | T![/] => {
                 let op = self.next().unwrap().typ;
                 let factor = self.parse_factor()?;
-                let rhs1 = self.apply3(
-                    ptr!(AstNode::Builtin(Op::InfixOp(op))),
-                    rhs,
-                    factor
-                );
+                let rhs1 = self.apply3(ptr!(AstNode::Builtin(Op::InfixOp(op))), rhs, factor);
                 self.parse_mul1(rhs1)
             }
             _ => Ok(rhs),
@@ -467,10 +453,7 @@ impl<'a> Parser<'a> {
 
     fn parse_listelems(&mut self) -> ParserResult {
         let expr = self.parse_expr()?;
-        let list_app = self.apply2(
-            ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
-            expr
-        );
+        let list_app = self.apply2(ptr!(AstNode::Builtin(Op::InfixOp(T![:]))), expr);
         Ok(ptr!(AstNode::App(list_app, self.parse_listelems1()?)))
     }
 
@@ -479,15 +462,10 @@ impl<'a> Parser<'a> {
             T![,] => {
                 self.consume(&T![,]);
                 let expr = self.parse_expr()?;
-                let list_app = self.apply2(
-                    ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
-                    expr
-                );
-                Ok(
-                    ptr!(AstNode::App(list_app, self.parse_listelems1()?))
-                )
+                let list_app = self.apply2(ptr!(AstNode::Builtin(Op::InfixOp(T![:]))), expr);
+                Ok(ptr!(AstNode::App(list_app, self.parse_listelems1()?)))
             }
-            _ => Ok(ptr!(AstNode::Constant(T![nil])))
+            _ => Ok(ptr!(AstNode::Constant(T![nil]))),
         }
     }
 
@@ -587,7 +565,7 @@ mod tests {
     fn test_parse_basic_epxr() {
         let expr = parse_expr("[1,2,\"ab\", true, 5.6, id]");
         assert_eq!(
-            expr.deref().borrow().to_string(), 
+            expr.deref().borrow().to_string(),
             "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ Id:id) @ nil))))))"
         );
         let expr = parse_expr("1.2 + 2 * 3 - 4 / 5");
@@ -617,20 +595,29 @@ mod tests {
             params: None,
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ Number:5) @ Number:2)");
+        assert_eq!(
+            astnode.deref().borrow().to_string(),
+            "((+ @ Number:5) @ Number:2)"
+        );
 
         let def = &Def {
             name: "b".to_string(),
             params: Some(vec!["x".to_string()]),
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((* @ (- @ Number:2.3)) @ Id:x)");
+        assert_eq!(
+            astnode.deref().borrow().to_string(),
+            "((* @ (- @ Number:2.3)) @ Id:x)"
+        );
 
         let def = &Def {
             name: "plus".to_string(),
             params: Some(vec!["x".to_string(), "y".to_string(), "z".to_string()]),
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)");
+        assert_eq!(
+            astnode.deref().borrow().to_string(),
+            "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)"
+        );
     }
 }

@@ -1,19 +1,21 @@
-use std::collections::HashMap;
-use std::{rc::Rc, cell::RefCell};
 use crate::ptr;
-use crate::{T, error::SaslError, frontend::ast::{self, AstNode, Identifier, Op, AstNodePtr}};
+use crate::{
+    error::SaslError,
+    frontend::ast::{self, AstNode, AstNodePtr, Identifier, Op},
+    T,
+};
+use std::collections::HashMap;
+use std::{cell::RefCell, rc::Rc};
 
 type AbstractorResult = Result<AstNodePtr, SaslError>;
 
 pub struct Abstractor<'a> {
-    ids: &'a Option<Vec<Identifier>>
+    ids: &'a Option<Vec<Identifier>>,
 }
 
 impl<'a> Abstractor<'a> {
     pub fn new(ids: &'a Option<Vec<Identifier>>) -> Self {
-        Self {
-            ids
-        }
+        Self { ids }
     }
 
     /// Check if a given identifiert occurs in a given AST.
@@ -23,7 +25,7 @@ impl<'a> Abstractor<'a> {
                 self.check_for_recursion(id, lhs) || self.check_for_recursion(id, rhs)
             }
             AstNode::Ident(s) => id.contains(&s),
-            _ => false
+            _ => false,
         }
     }
 
@@ -76,32 +78,34 @@ impl<'a> Abstractor<'a> {
                 }
             }
             // [x](f @ a) = S @ [x]f @ [x]a
-            AstNode::App(ref f, ref a) => Ok(
-                ast::apply3(
-                    ptr!(AstNode::S),
-                    self.abstract_id(Rc::clone(f), id)?,
-                    self.abstract_id(Rc::clone(a), id)?
-                )
-            ),
+            AstNode::App(ref f, ref a) => Ok(ast::apply3(
+                ptr!(AstNode::S),
+                self.abstract_id(Rc::clone(f), id)?,
+                self.abstract_id(Rc::clone(a), id)?,
+            )),
             AstNode::Where(ref mut lhs, ref mut defs) => {
                 if defs.len() == 1 {
                     let (def_name, (params, body)) = defs.iter_mut().next().unwrap();
                     self.abstract_single_where(def_name, params, body)?;
                     let free_def_name_body = self.abstract_id(Rc::clone(&lhs), def_name)?;
-                    self.abstract_id(
-                        ast::apply2(free_def_name_body, Rc::clone(body)),
-                        id
-                    )
+                    self.abstract_id(ast::apply2(free_def_name_body, Rc::clone(body)), id)
                 } else {
                     let freed_where = self.abstract_multiple_where(lhs, defs)?;
                     self.abstract_id(freed_where, id)
                 }
             }
-            _ => Err(SaslError::CompilerError {msg: "Erroneous AST.".to_string()})
+            _ => Err(SaslError::CompilerError {
+                msg: "Erroneous AST.".to_string(),
+            }),
         }
     }
 
-    fn abstract_single_where(&mut self, name: &Identifier, params: &Option<Vec<Identifier>>, body: &mut AstNodePtr) -> Result<(), SaslError> {
+    fn abstract_single_where(
+        &mut self,
+        name: &Identifier,
+        params: &Option<Vec<Identifier>>,
+        body: &mut AstNodePtr,
+    ) -> Result<(), SaslError> {
         // where f x y z = E -> ([x]([y]([z] E)))
         if let Some(_) = params {
             let mut abst = Abstractor::new(params);
@@ -114,26 +118,33 @@ impl<'a> Abstractor<'a> {
         Ok(())
     }
 
-    fn abstract_multiple_where(&mut self, lhs: &mut AstNodePtr, defs: &mut HashMap<String, (Option<Vec<Identifier>>, AstNodePtr)>) -> Result<AstNodePtr, SaslError> {
+    fn abstract_multiple_where(
+        &mut self,
+        lhs: &mut AstNodePtr,
+        defs: &mut HashMap<String, (Option<Vec<Identifier>>, AstNodePtr)>,
+    ) -> Result<AstNodePtr, SaslError> {
         // Abstract all where definitions
         let mut abstracted_defs = vec![];
         for (name, (params, body)) in defs.iter_mut() {
             self.abstract_single_where(name, params, body)?;
             abstracted_defs.push((name.clone(), Rc::clone(body)));
         }
-        let def_names: Vec<Identifier> = abstracted_defs.iter().map(|(name, _)| name.clone()).collect();
+        let def_names: Vec<Identifier> = abstracted_defs
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
         let is_recursive = self.check_for_mutual_recursion(&abstracted_defs);
         // Build [[x1] E1, [x2]E2, ...] = [x1]E1 : ([x2]E2 : nil)
-        let mut defs_list = ast::apply3( 
+        let mut defs_list = ast::apply3(
             ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
             abstracted_defs.pop().unwrap().1,
-            ptr!(AstNode::Constant(T![nil]))
+            ptr!(AstNode::Constant(T![nil])),
         );
         while !abstracted_defs.is_empty() {
             defs_list = ast::apply3(
                 ptr!(AstNode::Builtin(Op::InfixOp(T![:]))),
                 abstracted_defs.pop().unwrap().1,
-                defs_list
+                defs_list,
             );
         }
         // Abstract where definition calls from main body
@@ -162,8 +173,8 @@ impl<'a> Abstractor<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::frontend::{ast::Ast, parser::Parser, lexer::Lexer};
     use super::*;
+    use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser};
 
     fn parse_to_ast(code: &str) -> Ast {
         Parser::new(Lexer::new(code).tokenize().unwrap())
@@ -179,30 +190,20 @@ mod tests {
                 d.push((name.clone(), Rc::clone(body)))
             }
             return abst.check_for_mutual_recursion(&d);
-        }   
+        }
         false
     }
 
     #[test]
     fn test_check_recursion() {
-        let mut ast = parse_to_ast(
-            "x where f x = g x; g y = f y"
-        );
+        let mut ast = parse_to_ast("x where f x = g x; g y = f y");
         assert!(check_recursion(ast.body));
-        ast = parse_to_ast(
-            "x where f x = f x; g y = g y"
-        );
+        ast = parse_to_ast("x where f x = f x; g y = g y");
         assert!(check_recursion(ast.body));
-        ast = parse_to_ast(
-            "x where f x = x; g = 5"
-        );
+        ast = parse_to_ast("x where f x = x; g = 5");
         assert!(!check_recursion(ast.body));
-        ast = parse_to_ast(
-            "1 where f x = 5 * x; g x = x; h x = g x"
-        );
+        ast = parse_to_ast("1 where f x = 5 * x; g x = x; h x = g x");
         assert!(check_recursion(ast.body));
-        ast = parse_to_ast(
-            "1 where f x = f x"
-        );
+        ast = parse_to_ast("1 where f x = f x");
     }
 }

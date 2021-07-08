@@ -19,5 +19,5 @@ macro_rules! hashmap {
 macro_rules! ptr {
     ( $val: expr ) => {
         Rc::new(RefCell::new($val))
-    }
+    };
 }

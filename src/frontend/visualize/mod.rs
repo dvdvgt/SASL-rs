@@ -1,4 +1,4 @@
-use super::ast::{Ast, AstNode, Op, AstNodePtr};
+use super::ast::{Ast, AstNode, AstNodePtr, Op};
 use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;
 
@@ -102,7 +102,9 @@ impl Visualizer {
             }
             AstNode::Builtin(Op::Cond) => self.add_node("cond".to_string()),
             // Combinators
-            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => self.add_node((*nodes.borrow()).to_string()),
+            AstNode::S | AstNode::K | AstNode::I | AstNode::Y | AstNode::U => {
+                self.add_node((*nodes.borrow()).to_string())
+            }
             // Application
             AstNode::App(lhs, rhs) => {
                 let node_name = self.get_next_id();
