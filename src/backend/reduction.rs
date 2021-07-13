@@ -431,11 +431,11 @@ impl ReductionMachine {
         //
         self.left_ancestor_stack.push(pair);
         self.reduce()?;
-        let pair = self.left_ancestor_stack.pop().unwrap();
+        let pair = self.left_ancestor_stack.pop().unwrap().borrow().clone();
 
-        if let AstNode::Pair(_, tail) = &*pair.borrow() {
+        if let AstNode::Pair(_, _) = pair {
             set_app_child_value!(lhs(top) = AstNode::I);
-            set_app_child_value!(rhs(top) = tail.borrow().clone());
+            set_app_child_value!(rhs(top) = pair);
         } else {
             panic!("tl used on non-list value.")
         }
