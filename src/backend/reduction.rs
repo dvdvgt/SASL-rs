@@ -5,17 +5,18 @@ use crate::{
 };
 use crate::{ptr, T};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::io::empty;
 
 macro_rules! get_app_child {
     (rhs($node:expr)) => {
         match &*$node.borrow() {
-            AstNode::App(_, rhs) => Rc::clone(rhs),
+            AstNode::App(_, rhs) => Rc::clone(&rhs),
             _ => panic!(),
         }
     };
     (lhs($node:expr)) => {
         match &*$node.borrow() {
-            AstNode::App(lhs, _) => Rc::clone(lhs),
+            AstNode::App(lhs, _) => Rc::clone(&lhs),
             _ => panic!(),
         }
     };
@@ -49,18 +50,7 @@ macro_rules! set_app_child_value {
     };
 }
 
-macro_rules! set_app_child_ptr {
-    ( rhs($app_node:expr) = $node:expr ) => {
-        if let AstNode::App(_, rhs) = &mut *$app_node.borrow_mut() {
-            *rhs = $node;
-        };
-    };
-    ( lhs($app_node:expr) = $node:expr ) => {
-        if let AstNode::App(mut lhs, _) = &*$app_node.borrow_mut() {
-            *lhs = $node;
-        };
-    };
-}
+
 
 macro_rules! check_type {
     ($nodeptr:expr; number) => {
@@ -77,8 +67,22 @@ macro_rules! check_type {
             false
         }
     };
+    ($nodeptr:expr; string) => {
+        if let AstNode::Constant(Type::String(_)) = &*$nodeptr.borrow() {
+            true
+        } else {
+            false
+        }
+    };
     ($nodeptr:expr; nil) => {
         if let AstNode::Constant(Type::Nil) = &*$nodeptr.borrow() {
+            true
+        } else {
+            false
+        }
+    };
+    ($nodeptr:expr; pair) => {
+        if let AstNode::Pair(_,_) = &*$nodeptr.borrow() {
             true
         } else {
             false
@@ -101,8 +105,19 @@ macro_rules! get_const_val {
             panic!("Expected boolean.")
         }
     };
+    ($node:expr; string) => {
+        if let AstNode::Constant(Type::String(x)) = &*$node.borrow() {
+            x.clone()
+        } else {
+            panic!("Expected string.")
+        }
+    };
 }
 
+enum DefPosition {
+    Lhs,
+    Rhs,
+}
 type Stack<T> = Vec<T>;
 pub struct ReductionMachine {
     ast: Ast,
@@ -125,7 +140,24 @@ impl ReductionMachine {
             println!("{}", &self.ast);
             let top = self.left_ancestor_stack.last().unwrap().borrow().clone();
             match top {
-                AstNode::App(lhs, _) => self.left_ancestor_stack.push(Rc::clone(&lhs)),
+                AstNode::App(lhs, rhs) => {
+                    let lhs_ = lhs.borrow().clone();
+                    let rhs_ = rhs.borrow().clone();
+                    match (lhs_,rhs_) {
+                        (AstNode::Ident(s1), AstNode::Ident(s2)) => {
+                            self.reduce_global_defs(s1.clone(), DefPosition::Lhs)?;
+                            self.reduce_global_defs(s2.clone(), DefPosition::Rhs)?;
+                        }
+                        (AstNode::Ident(s), _) => {
+                            self.reduce_global_defs(s.clone(), DefPosition::Lhs)?;
+                        }
+                        (_, AstNode::Ident(s)) => {
+                            self.reduce_global_defs(s.clone(), DefPosition::Rhs)?;
+                        }
+                        (_,_) => self.left_ancestor_stack.push(Rc::clone(&lhs))
+                    }
+
+                },
                 AstNode::S
                 | AstNode::S_
                 | AstNode::K
@@ -136,14 +168,34 @@ impl ReductionMachine {
                 | AstNode::C
                 | AstNode::C_
                 | AstNode::B_
-                | AstNode::Ident(_)
                 | AstNode::Builtin(_) => {
                     self.reduce_builtin()?;
                     ()
+                },
+                AstNode::Ident(s) => {
+                    *self.left_ancestor_stack.last().unwrap().borrow_mut() = self.ast.global_defs.get(&s).unwrap().1.borrow().clone();
                 }
                 _ => break,
             };
         }
+        /*loop {
+            if check_type!( &self.left_ancestor_stack.last(); pair ){
+                let lhs = get_app_child!(lhs(self.left_ancestor_stack.last().unwrap()));
+                let rhs = get_app_child!(rhs(self.left_ancestor_stack.last().unwrap()));
+                print!("{}", &*lhs.borrow());
+                self.left_ancestor_stack.push(rhs);
+                self.reduce()?;
+                let rhs = self.left_ancestor_stack.pop().clone();
+
+                if check_type!(&rhs; nil) {
+                    break;
+                }
+            }else{
+                break;
+            }
+        }*/
+        self.print_list();
+
         Ok(self
             .left_ancestor_stack
             .last()
@@ -151,6 +203,48 @@ impl ReductionMachine {
             .clone()
             .borrow()
             .clone())
+    }
+
+    pub fn print_list(&mut self) -> Result<(), SaslError> {
+        if check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
+             let mut printer = String::from("[");
+            while check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
+                let lhs = get_pair_child!(lhs(self.left_ancestor_stack.last().unwrap()));
+                let rhs = get_pair_child!(rhs(self.left_ancestor_stack.last().unwrap()));
+
+                self.left_ancestor_stack.push(lhs);
+                self.reduce();
+                let lhs = self.left_ancestor_stack.pop().unwrap();
+
+                if check_type!(&lhs; boolean){
+                    let lhs_val = get_const_val!(lhs; boolean);
+                    printer.push_str(&lhs_val.to_string());
+                }else if check_type!(&lhs; number){
+                    let lhs_val = get_const_val!(lhs; number);
+                    printer.push_str(&lhs_val.to_string());
+                }else if check_type!(&lhs; string){
+                    let lhs_val = get_const_val!(lhs; string);
+                    printer.push_str(&lhs_val.to_string());
+                }
+
+                println!("{}", printer.clone());
+                self.left_ancestor_stack.push(ptr!(rhs.borrow().clone()));
+                self.reduce();
+               // let rhs = self.left_ancestor_stack.pop().unwrap();
+
+                if check_type!(&rhs; nil){
+                    printer.push(']');
+                    self.left_ancestor_stack.push(ptr!(AstNode::Constant(Type::String(printer.clone()))));
+                }else {
+                    printer.push(',');
+                }
+
+            }
+
+        }
+
+            Ok(())
+
     }
 
     pub fn get_result(&mut self) -> AstNode {
@@ -188,7 +282,7 @@ impl ReductionMachine {
             AstNode::Builtin(Op::InfixOp(T![:])) => self.reduce_cons(),
             AstNode::Builtin(Op::PrefixOp(T![head])) => self.reduce_hd(),
             AstNode::Builtin(Op::PrefixOp(T![tail])) => self.reduce_tl(),
-            AstNode::Ident(s) => self.reduce_global_defs(s),
+           // AstNode::Ident(s) => self.reduce_global_defs(s),
             AstNode::S => self.reduce_S(),
             AstNode::K => self.reduce_K(),
             AstNode::I => self.reduce_I(),
@@ -697,7 +791,7 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_global_defs(&mut self, s: String) -> Result<(), SaslError> {
+    fn reduce_global_defs(&mut self, s: String ,def_pos : DefPosition) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
         //look into Hashmap
         let x = self
@@ -709,7 +803,10 @@ impl ReductionMachine {
             .deref()
             .borrow()
             .clone();
-        set_app_child_value!(lhs(top) = x);
+        match def_pos {
+            DefPosition::Lhs => set_app_child_value!(lhs(top) = x),
+            DefPosition::Rhs => set_app_child_value!(rhs(top) = x)
+        }
         Ok(())
     }
 }
