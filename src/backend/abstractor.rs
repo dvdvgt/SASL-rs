@@ -131,6 +131,7 @@ impl<'a> Abstractor<'a> {
         }
         let def_names: Vec<Identifier> = abstracted_defs
             .iter()
+            .rev()
             .map(|(name, _)| name.clone())
             .collect();
         let is_recursive = self.check_for_mutual_recursion(&abstracted_defs);

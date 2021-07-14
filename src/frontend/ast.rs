@@ -107,6 +107,11 @@ pub enum AstNode {
     I,
     Y,
     U,
+    B,
+    B_,
+    C,
+    C_,
+    S_,
 }
 
 impl fmt::Display for AstNode {
@@ -123,7 +128,12 @@ impl fmt::Display for AstNode {
                     format!("({} @ {})", ast1.deref().borrow(), ast2.deref().borrow()),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
-                AstNode::Pair(a, b) => format!("({} @_pair {})", a.deref().borrow(), b.deref().borrow()),
+
+                AstNode::Pair(a, b) =>
+                    format!("({} @_pair {})", a.deref().borrow(), b.deref().borrow()),
+
+                AstNode::Pair(a, b) => format!("({} @ {})", a.deref().borrow(), b.deref().borrow()),
+
                 AstNode::Builtin(op) => op.to_string(),
                 AstNode::Empty => "empty".to_string(),
                 AstNode::S => "S".to_string(),
@@ -131,6 +141,11 @@ impl fmt::Display for AstNode {
                 AstNode::I => "I".to_string(),
                 AstNode::Y => "Y".to_string(),
                 AstNode::U => "U".to_string(),
+                AstNode::B => "B".to_string(),
+                AstNode::C => "C".to_string(),
+                AstNode::S_ => "S_".to_string(),
+                AstNode::B_ => "B_".to_string(),
+                AstNode::C_ => "C_".to_string(),
             }
         )
     }
