@@ -1,4 +1,5 @@
 //! Structs and functions concerned with generating graphs with Graphviz and DOT language.
+//! Also contains a simple graph implementation.
 
 use std::fmt::{self, Display};
 

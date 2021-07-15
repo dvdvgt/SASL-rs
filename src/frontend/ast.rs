@@ -1,5 +1,5 @@
 //! Abstract syntax tree datastructures.
-//! In here are all datastructures needed for creating the AST in the parser.
+//! In here are all datastructures needed for creating the AST in the parser, compiler and virtual machine.
 
 use std::{cell::RefCell, collections::HashMap, fmt, ops::Deref, rc::Rc};
 

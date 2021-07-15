@@ -1,3 +1,5 @@
+//! Contains a simple DOT parser used for creating PDFs with the visualized AST.
+
 use super::ast::{Ast, AstNode, AstNodePtr, Op};
 use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;

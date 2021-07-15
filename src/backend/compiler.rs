@@ -1,7 +1,11 @@
+//! Contains a simple entry point function for starting the abstraction of global definitions as well as the main expression.
+
 use super::abstractor::Abstractor;
 use crate::error::SaslError;
 use crate::frontend::ast::Ast;
 
+/// Abstract all global definitions as well as the main body expression. The given
+/// AST while be altered in-place.
 pub fn compile(ast: &mut Ast) -> Result<(), SaslError> {
     for (_, (p, body)) in ast.global_defs.iter_mut() {
         // Only functions need to be freeded of parameter names

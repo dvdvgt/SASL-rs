@@ -1,3 +1,5 @@
+//! This module contains the implementation of a virtual machine used for evaluating a SASL program.
+
 use crate::frontend::token::Type;
 use crate::{
     error::SaslError,
@@ -5,18 +7,17 @@ use crate::{
 };
 use crate::{ptr, T};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
-use std::io::empty;
 
 macro_rules! get_app_child {
     (rhs($node:expr)) => {
         match &*$node.borrow() {
-            AstNode::App(_, rhs) => Rc::clone(&rhs),
+            AstNode::App(_, rhs) => Rc::clone(rhs),
             _ => panic!(),
         }
     };
     (lhs($node:expr)) => {
         match &*$node.borrow() {
-            AstNode::App(lhs, _) => Rc::clone(&lhs),
+            AstNode::App(lhs, _) => Rc::clone(lhs),
             _ => panic!(),
         }
     };
@@ -26,13 +27,13 @@ macro_rules! get_pair_child {
     (rhs($node:expr)) => {
         match &*$node.borrow() {
             AstNode::Pair(_, rhs) => Rc::clone(rhs),
-            _ => panic!(),
+            _ => panic!("Expected Pair."),
         }
     };
     (lhs($node:expr)) => {
         match &*$node.borrow() {
             AstNode::Pair(lhs, _) => Rc::clone(lhs),
-            _ => panic!(),
+            _ => panic!("Expected Pair."),
         }
     };
 }
@@ -50,8 +51,6 @@ macro_rules! set_app_child_value {
     };
 }
 
-
-
 macro_rules! check_type {
     ($nodeptr:expr; number) => {
         if let AstNode::Constant(Type::Number(_)) = &*$nodeptr.borrow() {
@@ -67,22 +66,8 @@ macro_rules! check_type {
             false
         }
     };
-    ($nodeptr:expr; string) => {
-        if let AstNode::Constant(Type::String(_)) = &*$nodeptr.borrow() {
-            true
-        } else {
-            false
-        }
-    };
     ($nodeptr:expr; nil) => {
         if let AstNode::Constant(Type::Nil) = &*$nodeptr.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($nodeptr:expr; pair) => {
-        if let AstNode::Pair(_,_) = &*$nodeptr.borrow() {
             true
         } else {
             false
@@ -105,26 +90,27 @@ macro_rules! get_const_val {
             panic!("Expected boolean.")
         }
     };
-    ($node:expr; string) => {
-        if let AstNode::Constant(Type::String(x)) = &*$node.borrow() {
-            x.clone()
-        } else {
-            panic!("Expected string.")
-        }
-    };
 }
 
+/// Specifies where a global definition occured - as the left or right child
+/// of a application node.
 enum DefPosition {
     Lhs,
     Rhs,
 }
+
+/// The vector datastructure is used as simple stack by the virtual machine hence the type alias.
 type Stack<T> = Vec<T>;
+
+/// The reduction machine is a virtual machine used for evaluating a SASL program until a
+/// single, printable atomic value is reached i.e. Number, Boolean, String, List.
 pub struct ReductionMachine {
     ast: Ast,
     left_ancestor_stack: Stack<AstNodePtr>,
 }
 
 impl ReductionMachine {
+
     pub fn new(ast: Ast) -> Self {
         let stack = vec![Rc::clone(&ast.body)];
         Self {
@@ -132,32 +118,86 @@ impl ReductionMachine {
             left_ancestor_stack: stack,
         }
     }
-    // Control of reduction
 
-    pub fn reduce(&mut self) -> Result<AstNode, SaslError> {
-        // if no more action steps are to be executed, the loop terminates
+    /// Helper functions for peeking at the last element of the `left_ancestor_stack`.
+    pub fn peek_stack(&self) -> AstNode {
+        self.left_ancestor_stack
+            .last()
+            .unwrap()
+            .borrow()
+            .clone()
+    }
+
+    /// Helper function for conveniently throwing a compiler error.
+    fn throw_compile_err(&self, msg: &str) -> Result<(), SaslError> {
+        Err(SaslError::CompilerError {
+            msg: msg.to_string(),
+        })
+    }
+
+    /// Returns the result as a string after the reduction has finished.
+    pub fn print_result(&mut self) -> Result<String, SaslError> {
+        let mut top = self.peek_stack();
+        // If the top of the stack contains a pair it still needs to be reduced in order to
+        // be printable due to lazy evaluation.
+        if let AstNode::Pair(_, _) = top {
+            let mut out_str = "[".to_string();
+            while let AstNode::Pair(lhs, rhs) = top {
+                self.left_ancestor_stack.pop();
+                // Reduce the list head and recursivly create the corresponding string
+                // in case the list head is a list itself.
+                self.left_ancestor_stack.push(lhs.clone());
+                self.reduce()?;
+                out_str.push_str(&self.print_result()?);
+
+                // Reduce the tail of the list
+                self.left_ancestor_stack.push(rhs.clone());
+                self.reduce()?;
+
+                // Check if the end of the list was reached
+                let rhs = self.peek_stack();
+                if let AstNode::Constant(T![nil]) = rhs {
+                    out_str.push(']');
+                    break;
+                } else {
+                    out_str.push_str(", ");
+                }
+                top = self.peek_stack();
+            }
+            Ok(out_str)
+        } else { // If the Node is not a list it can simply be converted into a string
+            Ok(
+                self.peek_stack().to_string()
+            )
+        }
+    }
+
+    /// 
+    pub fn reduce(&mut self) -> Result<(), SaslError> {
+        // Main loop of the left ancestor stack. Nodes are pushed onto the stack until a left leaf is reached
+        // where the reduction kicks in.
         loop {
-            println!("{}", &self.ast);
-            let top = self.left_ancestor_stack.last().unwrap().borrow().clone();
+            //println!("{}", &self.ast);
+            let top = self.peek_stack();
             match top {
+                // Handle global definitions which are still to be inserted in place of their identifier.
                 AstNode::App(lhs, rhs) => {
                     let lhs_ = lhs.borrow().clone();
                     let rhs_ = rhs.borrow().clone();
-                    match (lhs_,rhs_) {
+                    match (lhs_, rhs_) {
+                        // Something like `f @ x` where both f and x are global definitions
                         (AstNode::Ident(s1), AstNode::Ident(s2)) => {
                             self.reduce_global_defs(s1.clone(), DefPosition::Lhs)?;
                             self.reduce_global_defs(s2.clone(), DefPosition::Rhs)?;
                         }
-                        (AstNode::Ident(s), _) => {
-                            self.reduce_global_defs(s.clone(), DefPosition::Lhs)?;
-                        }
-                        (_, AstNode::Ident(s)) => {
-                            self.reduce_global_defs(s.clone(), DefPosition::Rhs)?;
-                        }
-                        (_,_) => self.left_ancestor_stack.push(Rc::clone(&lhs))
+                        // Something like `1 + x` where x is a global definition
+                        (_, AstNode::Ident(s)) => self.reduce_global_defs(s.clone(), DefPosition::Rhs)?,
+                        // Something like `f 1` where f is a globally defined function
+                        (AstNode::Ident(s), _) => self.reduce_global_defs(s.clone(), DefPosition::Lhs)?,
+                        // Otherwise both are builtins or literals. Just the left child onto the stack
+                        (_, _) => self.left_ancestor_stack.push(Rc::clone(&lhs))
                     }
-
-                },
+                }
                 AstNode::S
                 | AstNode::S_
                 | AstNode::K
@@ -171,96 +211,17 @@ impl ReductionMachine {
                 | AstNode::Builtin(_) => {
                     self.reduce_builtin()?;
                     ()
-                },
+                }
+                // Handle a single global definition
                 AstNode::Ident(s) => {
                     *self.left_ancestor_stack.last().unwrap().borrow_mut() = self.ast.global_defs.get(&s).unwrap().1.borrow().clone();
                 }
                 _ => break,
             };
         }
-        /*loop {
-            if check_type!( &self.left_ancestor_stack.last(); pair ){
-                let lhs = get_app_child!(lhs(self.left_ancestor_stack.last().unwrap()));
-                let rhs = get_app_child!(rhs(self.left_ancestor_stack.last().unwrap()));
-                print!("{}", &*lhs.borrow());
-                self.left_ancestor_stack.push(rhs);
-                self.reduce()?;
-                let rhs = self.left_ancestor_stack.pop().clone();
-
-                if check_type!(&rhs; nil) {
-                    break;
-                }
-            }else{
-                break;
-            }
-        }*/
-        self.print_list();
-
-        Ok(self
-            .left_ancestor_stack
-            .last()
-            .unwrap()
-            .clone()
-            .borrow()
-            .clone())
+        Ok(())
     }
 
-    pub fn print_list(&mut self) -> Result<(), SaslError> {
-        if check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
-             let mut printer = String::from("[");
-            while check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
-                let lhs = get_pair_child!(lhs(self.left_ancestor_stack.last().unwrap()));
-                let rhs = get_pair_child!(rhs(self.left_ancestor_stack.last().unwrap()));
-
-                self.left_ancestor_stack.push(lhs);
-                self.reduce();
-                let lhs = self.left_ancestor_stack.pop().unwrap();
-
-                if check_type!(&lhs; boolean){
-                    let lhs_val = get_const_val!(lhs; boolean);
-                    printer.push_str(&lhs_val.to_string());
-                }else if check_type!(&lhs; number){
-                    let lhs_val = get_const_val!(lhs; number);
-                    printer.push_str(&lhs_val.to_string());
-                }else if check_type!(&lhs; string){
-                    let lhs_val = get_const_val!(lhs; string);
-                    printer.push_str(&lhs_val.to_string());
-                }
-
-                println!("{}", printer.clone());
-                self.left_ancestor_stack.push(ptr!(rhs.borrow().clone()));
-                self.reduce();
-               // let rhs = self.left_ancestor_stack.pop().unwrap();
-
-                if check_type!(&rhs; nil){
-                    printer.push(']');
-                    self.left_ancestor_stack.push(ptr!(AstNode::Constant(Type::String(printer.clone()))));
-                }else {
-                    printer.push(',');
-                }
-
-            }
-
-        }
-
-            Ok(())
-
-    }
-
-    pub fn get_result(&mut self) -> AstNode {
-        self.left_ancestor_stack
-            .pop()
-            .unwrap()
-            .deref()
-            .borrow()
-            .clone()
-    }
-
-    fn throw_compile_err(&self, msg: &str) -> Result<(), SaslError> {
-        Err(SaslError::CompilerError {
-            msg: msg.to_string(),
-        })
-    }
     // distribute the reduction steps
     fn reduce_builtin(&mut self) -> Result<(), SaslError> {
         let builtin = self.left_ancestor_stack.pop().unwrap().borrow().clone();
@@ -282,7 +243,6 @@ impl ReductionMachine {
             AstNode::Builtin(Op::InfixOp(T![:])) => self.reduce_cons(),
             AstNode::Builtin(Op::PrefixOp(T![head])) => self.reduce_hd(),
             AstNode::Builtin(Op::PrefixOp(T![tail])) => self.reduce_tl(),
-           // AstNode::Ident(s) => self.reduce_global_defs(s),
             AstNode::S => self.reduce_S(),
             AstNode::K => self.reduce_K(),
             AstNode::I => self.reduce_I(),
@@ -386,7 +346,7 @@ impl ReductionMachine {
         set_app_child_value!(rhs(top) = y_and_f);
 
         set_app_child_value!(lhs(top) = f);
-        println!("hier,{}", &*top.borrow());
+        //println!("hier,{}", &*top.borrow());
         //panic!()
         Ok(())
     }
@@ -791,7 +751,7 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_global_defs(&mut self, s: String ,def_pos : DefPosition) -> Result<(), SaslError> {
+    fn reduce_global_defs(&mut self, s: String, def_pos: DefPosition) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
         //look into Hashmap
         let x = self

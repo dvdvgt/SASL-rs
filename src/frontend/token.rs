@@ -1,4 +1,4 @@
-//! Datastructures needed for representing tokens.
+//! Datastructures needed for representing tokens as well as their string representation.
 
 use phf::phf_map;
 use std::fmt;

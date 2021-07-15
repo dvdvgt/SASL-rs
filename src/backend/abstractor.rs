@@ -1,3 +1,6 @@
+//! This file contains the implementation of the compiler called `Abstractor'. It replaces all identifiers in
+//! a expression with `S,K,I` combinators based on the rules defined by the SASL language.
+
 use crate::ptr;
 use crate::{
     error::SaslError,
@@ -39,6 +42,7 @@ impl<'a> Abstractor<'a> {
         found_recursion
     }
 
+    /// Abstracts away all identifiers in a expressions.
     pub fn abstract_ids(&mut self, body: &mut AstNodePtr) -> Result<(), SaslError> {
         // If it's a function definition it has to have parameters which need to abstracted.
         // Otherwise it's just a const which may or may not contain a where.

@@ -1,4 +1,4 @@
-//! Recursive descent parser implementation.
+//! Recursive descent parser implementation for the SASL language created in accordance to the given BNF grammar rules.
 
 use std::cell::RefCell;
 use std::collections::{hash_map::HashMap, VecDeque};
