@@ -7,6 +7,7 @@ use crate::{ptr, T};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 use std::io::empty;
 
+
 macro_rules! get_app_child {
     (rhs($node:expr)) => {
         match &*$node.borrow() {
@@ -105,14 +106,9 @@ macro_rules! get_const_val {
             panic!("Expected boolean.")
         }
     };
-    ($node:expr; string) => {
-        if let AstNode::Constant(Type::String(x)) = &*$node.borrow() {
-            x.clone()
-        } else {
-            panic!("Expected string.")
-        }
-    };
+
 }
+
 
 enum DefPosition {
     Lhs,
@@ -132,32 +128,65 @@ impl ReductionMachine {
             left_ancestor_stack: stack,
         }
     }
-    // Control of reduction
 
-    pub fn reduce(&mut self) -> Result<AstNode, SaslError> {
+    pub fn peek_stack(&self) -> AstNode {
+        self.left_ancestor_stack
+            .last()
+            .unwrap()
+            .borrow()
+            .clone()
+    }
+
+    pub fn print_result(&mut self) -> Result<String, SaslError> {
+        let mut top = self.peek_stack();
+        if let AstNode::Pair(_, _) = top {
+            let mut out_str = "[".to_string();
+            while let AstNode::Pair(lhs, rhs) = top {
+                self.left_ancestor_stack.pop();
+                self.left_ancestor_stack.push(lhs.clone());
+                self.reduce()?;
+                let t = self.print_result()?;
+                out_str.push_str(&t);
+
+                self.left_ancestor_stack.push(rhs.clone());
+                self.reduce()?;
+
+                let rhs = self.peek_stack();
+                if let AstNode::Constant(T![nil]) = rhs {
+                    out_str.push(']');
+                    break;
+                } else {
+                    out_str.push_str(", ");
+                }
+                top = self.peek_stack();
+            }
+            Ok(out_str)
+        } else {
+            Ok(
+                self.peek_stack().to_string()
+            )
+        }
+    }
+
+    pub fn reduce(&mut self) -> Result<(), SaslError> {
         // if no more action steps are to be executed, the loop terminates
         loop {
-            println!("{}", &self.ast);
-            let top = self.left_ancestor_stack.last().unwrap().borrow().clone();
+            //println!("{}", &self.ast);
+            let top = self.peek_stack();
             match top {
                 AstNode::App(lhs, rhs) => {
                     let lhs_ = lhs.borrow().clone();
                     let rhs_ = rhs.borrow().clone();
-                    match (lhs_,rhs_) {
+                    match (lhs_, rhs_) {
                         (AstNode::Ident(s1), AstNode::Ident(s2)) => {
                             self.reduce_global_defs(s1.clone(), DefPosition::Lhs)?;
                             self.reduce_global_defs(s2.clone(), DefPosition::Rhs)?;
                         }
-                        (AstNode::Ident(s), _) => {
-                            self.reduce_global_defs(s.clone(), DefPosition::Lhs)?;
-                        }
-                        (_, AstNode::Ident(s)) => {
-                            self.reduce_global_defs(s.clone(), DefPosition::Rhs)?;
-                        }
-                        (_,_) => self.left_ancestor_stack.push(Rc::clone(&lhs))
+                        (_, AstNode::Ident(s)) => self.reduce_global_defs(s.clone(), DefPosition::Rhs)?,
+                        (AstNode::Ident(s), _) => self.reduce_global_defs(s.clone(), DefPosition::Lhs)?,
+                        (_, _) => self.left_ancestor_stack.push(Rc::clone(&lhs))
                     }
-
-                },
+                }
                 AstNode::S
                 | AstNode::S_
                 | AstNode::K
@@ -171,49 +200,27 @@ impl ReductionMachine {
                 | AstNode::Builtin(_) => {
                     self.reduce_builtin()?;
                     ()
-                },
+                }
                 AstNode::Ident(s) => {
                     *self.left_ancestor_stack.last().unwrap().borrow_mut() = self.ast.global_defs.get(&s).unwrap().1.borrow().clone();
                 }
                 _ => break,
             };
         }
-        /*loop {
-            if check_type!( &self.left_ancestor_stack.last(); pair ){
-                let lhs = get_app_child!(lhs(self.left_ancestor_stack.last().unwrap()));
-                let rhs = get_app_child!(rhs(self.left_ancestor_stack.last().unwrap()));
-                print!("{}", &*lhs.borrow());
-                self.left_ancestor_stack.push(rhs);
-                self.reduce()?;
-                let rhs = self.left_ancestor_stack.pop().clone();
-
-                if check_type!(&rhs; nil) {
-                    break;
-                }
-            }else{
-                break;
-            }
-        }*/
-        self.print_list();
-
-        Ok(self
-            .left_ancestor_stack
-            .last()
-            .unwrap()
-            .clone()
-            .borrow()
-            .clone())
+        Ok(())
     }
 
-    pub fn print_list(&mut self) -> Result<(), SaslError> {
+
+    /*pub fn print_list(&mut self) -> Result<(), SaslError> {
         if check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
              let mut printer = String::from("[");
             while check_type!(&*self.left_ancestor_stack.last().unwrap(); pair) {
                 let lhs = get_pair_child!(lhs(self.left_ancestor_stack.last().unwrap()));
                 let rhs = get_pair_child!(rhs(self.left_ancestor_stack.last().unwrap()));
 
+
                 self.left_ancestor_stack.push(lhs);
-                self.reduce();
+                self.reduce_builtin();
                 let lhs = self.left_ancestor_stack.pop().unwrap();
 
                 if check_type!(&lhs; boolean){
@@ -229,7 +236,7 @@ impl ReductionMachine {
 
                 println!("{}", printer.clone());
                 self.left_ancestor_stack.push(ptr!(rhs.borrow().clone()));
-                self.reduce();
+              //  self.reduce_builtin();
                // let rhs = self.left_ancestor_stack.pop().unwrap();
 
                 if check_type!(&rhs; nil){
@@ -245,7 +252,7 @@ impl ReductionMachine {
 
             Ok(())
 
-    }
+    }*/
 
     pub fn get_result(&mut self) -> AstNode {
         self.left_ancestor_stack
