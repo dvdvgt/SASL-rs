@@ -8,10 +8,9 @@ use crate::frontend::ast::Ast;
 /// AST while be altered in-place.
 pub fn compile(ast: &mut Ast) -> Result<(), SaslError> {
     for (_, (p, body)) in ast.global_defs.iter_mut() {
-        // Only functions need to be freeded of parameter names
-        if let Some(_) = p {
-            Abstractor::new(p).abstract_ids(body)?;
-        }
+        // Abstract global functions as well as global constants since global
+        // constants can contain a where which needs to be abstracted.
+        Abstractor::new(p).abstract_ids(body)?;
     }
     // Handle main expression
     Abstractor::new(&None).abstract_ids(&mut ast.body)?;
