@@ -8,7 +8,6 @@ use crate::{
 use crate::{ptr, T};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-
 macro_rules! get_app_child {
     (rhs($node:expr)) => {
         match &*$node.borrow() {
@@ -95,7 +94,7 @@ macro_rules! get_const_val {
 
 macro_rules! match_astnode {
     ($node:expr; app) => {
-        if let AstNode::App(_,_)= &*$node.borrow() {
+        if let AstNode::App(_, _) = &*$node.borrow() {
             true
         } else {
             false
@@ -188,25 +187,23 @@ type Stack<T> = Vec<T>;
 pub struct ReductionMachine {
     ast: Ast,
     left_ancestor_stack: Stack<AstNodePtr>,
+    /// Activate optimizations or evaluate without any
+    optimize: bool
 }
 
 impl ReductionMachine {
-
-    pub fn new(ast: Ast) -> Self {
+    pub fn new(ast: Ast, optimize: bool) -> Self {
         let stack = vec![Rc::clone(&ast.body)];
         Self {
             ast,
             left_ancestor_stack: stack,
+            optimize
         }
     }
 
     /// Helper functions for peeking at the last element of the `left_ancestor_stack`.
     pub fn peek_stack(&self) -> AstNode {
-        self.left_ancestor_stack
-            .last()
-            .unwrap()
-            .borrow()
-            .clone()
+        self.left_ancestor_stack.last().unwrap().borrow().clone()
     }
 
     /// Helper function for conveniently throwing a compiler error.
@@ -246,14 +243,13 @@ impl ReductionMachine {
                 top = self.peek_stack();
             }
             Ok(out_str)
-        } else { // If the Node is not a list it can simply be converted into a string
-            Ok(
-                self.peek_stack().to_string()
-            )
+        } else {
+            // If the Node is not a list it can simply be converted into a string
+            Ok(self.peek_stack().to_string())
         }
     }
 
-    /// 
+    ///
     pub fn reduce(&mut self) -> Result<(), SaslError> {
         // Main loop of the left ancestor stack. Nodes are pushed onto the stack until a left leaf is reached
         // where the reduction kicks in.
@@ -268,15 +264,19 @@ impl ReductionMachine {
                     match (lhs_, rhs_) {
                         // Something like `f @ x` where both f and x are global definitions
                         (AstNode::Ident(s1), AstNode::Ident(s2)) => {
-                            self.reduce_global_defs(s1.clone(), DefPosition::Lhs)?;
-                            self.reduce_global_defs(s2.clone(), DefPosition::Rhs)?;
+                            self.insert_global_def(s1.clone(), DefPosition::Lhs)?;
+                            self.insert_global_def(s2.clone(), DefPosition::Rhs)?;
                         }
                         // Something like `1 + x` where x is a global definition
-                        (_, AstNode::Ident(s)) => self.reduce_global_defs(s.clone(), DefPosition::Rhs)?,
+                        (_, AstNode::Ident(s)) => {
+                            self.insert_global_def(s.clone(), DefPosition::Rhs)?
+                        }
                         // Something like `f 1` where f is a globally defined function
-                        (AstNode::Ident(s), _) => self.reduce_global_defs(s.clone(), DefPosition::Lhs)?,
+                        (AstNode::Ident(s), _) => {
+                            self.insert_global_def(s.clone(), DefPosition::Lhs)?
+                        }
                         // Otherwise both are builtins or literals. Just the left child onto the stack
-                        (_, _) => self.left_ancestor_stack.push(Rc::clone(&lhs))
+                        (_, _) => self.left_ancestor_stack.push(Rc::clone(&lhs)),
                     }
                 }
                 AstNode::S
@@ -295,7 +295,8 @@ impl ReductionMachine {
                 }
                 // Handle a single global definition
                 AstNode::Ident(s) => {
-                    *self.left_ancestor_stack.last().unwrap().borrow_mut() = self.ast.global_defs.get(&s).unwrap().1.borrow().clone();
+                    *self.left_ancestor_stack.last().unwrap().borrow_mut() =
+                        self.ast.global_defs.get(&s).unwrap().1.borrow().clone();
                 }
                 _ => break,
             };
@@ -318,27 +319,27 @@ impl ReductionMachine {
             | AstNode::Builtin(Op::InfixOp(op @ T![>]))
             | AstNode::Builtin(Op::InfixOp(op @ T![>=]))
             | AstNode::Builtin(Op::InfixOp(op @ T![and]))
-            | AstNode::Builtin(Op::InfixOp(op @ T![or])) => self.reduce_binary(&op),
-            AstNode::Builtin(Op::Cond) => self.reduce_cond(),
-            AstNode::Builtin(Op::PrefixOp(T![not])) => self.reduce_unary(),
-            AstNode::Builtin(Op::InfixOp(T![:])) => self.reduce_cons(),
-            AstNode::Builtin(Op::PrefixOp(T![head])) => self.reduce_hd(),
-            AstNode::Builtin(Op::PrefixOp(T![tail])) => self.reduce_tl(),
-            AstNode::S => self.reduce_S(),
-            AstNode::K => self.reduce_K(),
-            AstNode::I => self.reduce_I(),
-            AstNode::Y => self.reduce_Y(),
-            AstNode::U => self.reduce_U(),
-            AstNode::S_ => self.eval_S_(),
-            AstNode::B => self.eval_B(),
-            AstNode::B_ => self.eval_B_star(),
-            AstNode::C => self.eval_C(),
-            AstNode::C_ => self.eval_C_(),
+            | AstNode::Builtin(Op::InfixOp(op @ T![or])) => self.eval_binary(&op),
+            AstNode::Builtin(Op::Cond) => self.eval_cond(),
+            AstNode::Builtin(Op::PrefixOp(T![not])) => self.eval_unary(),
+            AstNode::Builtin(Op::InfixOp(T![:])) => self.eval_cons(),
+            AstNode::Builtin(Op::PrefixOp(T![head])) => self.eval_hd(),
+            AstNode::Builtin(Op::PrefixOp(T![tail])) => self.eval_tl(),
+            AstNode::S => self.eval_s(),
+            AstNode::K => self.eval_k(),
+            AstNode::I => self.eval_i(),
+            AstNode::Y => self.eval_y(),
+            AstNode::U => self.eval_u(),
+            AstNode::S_ => self.eval_s_(),
+            AstNode::B => self.eval_b(),
+            AstNode::B_ => self.eval_b_star(),
+            AstNode::C => self.eval_c(),
+            AstNode::C_ => self.eval_c_(),
             _ => panic!(),
         }
     }
     //reduction of S'
-    fn eval_S_(&mut self) -> Result<(), SaslError> {
+    fn eval_s_(&mut self) -> Result<(), SaslError> {
         //c @ (f @ x) @ (g @ x)
         let c = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
@@ -352,12 +353,12 @@ impl ReductionMachine {
         let c_f_and_x = AstNode::App(ptr!(c.borrow().clone()), ptr!(f_and_x));
         //set app childs
         set_app_child_value!(lhs(top) = c_f_and_x);
-        set_app_child_value!(lhs(top) = g_and_x);
+        set_app_child_value!(rhs(top) = g_and_x);
         Ok(())
     }
     //redcution of B
-    fn eval_B(&mut self) -> Result<(), SaslError> {
-        // f @ (g @ x)
+    fn eval_b(&mut self) -> Result<(), SaslError> {
+        // B @ f @ g @ x ~> f @ (g @ x)
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
@@ -365,13 +366,13 @@ impl ReductionMachine {
         //Create (g @ x)
         let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
         //set app childs
-        set_app_child_value!(lhs(top) = (f.borrow().clone()));
+        set_app_child_value!(lhs(top) = f.borrow().clone());
         set_app_child_value!(rhs(top) = g_and_x);
 
         Ok(())
     }
     //Reduction of B*
-    fn eval_B_star(&mut self) -> Result<(), SaslError> {
+    fn eval_b_star(&mut self) -> Result<(), SaslError> {
         // c @ (f @ (g @ x))
         let c = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
@@ -382,12 +383,12 @@ impl ReductionMachine {
         let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
         let f_and_g_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(g_and_x));
         //set app childs
-        set_app_child_value!(lhs(top) = (c.borrow().clone()));
+        set_app_child_value!(lhs(top) = c.borrow().clone());
         set_app_child_value!(rhs(top) = f_and_g_and_x);
         Ok(())
     }
     //Reduction of C
-    fn eval_C(&mut self) -> Result<(), SaslError> {
+    fn eval_c(&mut self) -> Result<(), SaslError> {
         // f @ x @ g
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
@@ -396,13 +397,13 @@ impl ReductionMachine {
         //Create (f @ x)
         let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
         //set app childs
-        set_app_child_value!(lhs(top) = (g.borrow().clone()));
+        set_app_child_value!(rhs(top) = g.borrow().clone());
         set_app_child_value!(lhs(top) = f_and_x);
 
         Ok(())
     }
     //reduction of C'
-    fn eval_C_(&mut self) -> Result<(), SaslError> {
+    fn eval_c_(&mut self) -> Result<(), SaslError> {
         // c @ (f @ x) @ g )
         let c = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
@@ -413,12 +414,12 @@ impl ReductionMachine {
         let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
         let c_and_f_and_x = AstNode::App(ptr!(c.borrow().clone()), ptr!(f_and_x));
         //set app childs
-        set_app_child_value!(rhs(top) = (g.borrow().clone()));
+        set_app_child_value!(rhs(top) = g.borrow().clone());
         set_app_child_value!(lhs(top) = c_and_f_and_x);
         Ok(())
     }
     //reduction of recursion
-    fn reduce_Y(&mut self) -> Result<(), SaslError> {
+    fn eval_y(&mut self) -> Result<(), SaslError> {
         // f @ (Y @ f)
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let f = get_app_child!(rhs(top)).deref().borrow().clone();
@@ -430,7 +431,7 @@ impl ReductionMachine {
         Ok(())
     }
     //reduction for several variables
-    fn reduce_U(&mut self) -> Result<(), SaslError> {
+    fn eval_u(&mut self) -> Result<(), SaslError> {
         // (f @ (hd @ z)) @ (tl @ z)
         let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
@@ -454,15 +455,14 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_S(&mut self) -> Result<(), SaslError> {
+    fn eval_s(&mut self) -> Result<(), SaslError> {
         // switch to turn of/ on the optimization
-        let actiavte_optimazations = true;
-        if actiavte_optimazations {
+        if self.optimize {
             //optimization
-            self.optimizer();
+            self.optimize()?;
             Ok(())
         } else {
-            // (f @ x) @ (g @ x)
+            // S @ f @ g @ x ~> (f @ x) @ (g @ x)
             let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
             let g = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
             let top = self.left_ancestor_stack.last().unwrap().clone();
@@ -478,293 +478,139 @@ impl ReductionMachine {
         }
     }
 
-    fn optimizer(&mut self) -> Result<(), SaslError> {
-        let f = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
+    fn optimize(&mut self) -> Result<(), SaslError> {
+        // fib 5 where fib n = if (n=0) or (n=1) then 1 else (fib (n-1)) + (fib (n-2))
+        fn eval_s(x: AstNodePtr, y: AstNodePtr, next_top: AstNodePtr) {
+            // No optimization possible: S @ x @ y @ z ~> (x @ z) @ (y @ z)
+            let z = get_app_child!(rhs(next_top));
+
+            let x_at_z = AstNode::App(ptr!(x.borrow().clone()), ptr!(z.borrow().clone()));
+            let y_at_z = AstNode::App(ptr!(y.borrow().clone()), ptr!(z.borrow().clone()));
+            set_app_child_value!(lhs(next_top) = x_at_z);
+            set_app_child_value!(rhs(next_top) = y_at_z);
+        }
+        // S @ x @ y where S was already poped from the stack
+        // ^ not in stack
+        //   ^ On top of stack when this function is called
+        let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
-        let g = get_app_child!(rhs(top));
-
-        if match_astnode!(f; app) {
-
-            let f_rhs = get_app_child!(rhs(f));
-            let f_lhs = get_app_child!(lhs(f));
-
-            if match_astnode!(f_lhs; K) {
-                if match_astnode!(g; app){
-                    let g_rhs = get_app_child!(rhs(g));
-                    let g_lhs = get_app_child!(lhs(g));
-                    if match_astnode!(g_lhs; K) {
-                        //S @ (K @ f) @ (K @ g) =>  K @ (f @ g)
-                        //Create ( f @ g)
-                        let f_rhs_and_g_rhs = AstNode::App(
-                            ptr!(f_rhs.borrow().clone()),
-                            ptr!(g_rhs.borrow().clone()),
-                        );
+        let y = get_app_child!(rhs(top));
+        // Stack: S @ x @ y
+        //              ^ top of stack
+        if match_astnode!(x; app) {
+            let x_lhs = get_app_child!(lhs(x));
+            let x_rhs = get_app_child!(rhs(x));
+            if match_astnode!(x_lhs; K) {
+                if match_astnode!(y; app) {
+                    let y_lhs = get_app_child!(lhs(y));
+                    let y_rhs = get_app_child!(rhs(y));
+                    if match_astnode!(y_lhs; K) {
+                        // Rule 1: S @ (K @ f) @ (K @ g) ~> K @ (f @ g)
+                        // x = (K @ f), y = (K @ g), x_rhs = f, y_rhs = g
                         set_app_child_value!(lhs(top) = AstNode::K);
-                        set_app_child_value!(rhs(top) = f_rhs_and_g_rhs);
-
-                    }else if match_astnode!(g_lhs; app){
-                        let g_lhs_child_lhs = get_app_child!(lhs(g_lhs));
-                        let g_lhs_child_rhs = get_app_child!(rhs(g_lhs));
-                        if match_astnode!(g_lhs_child_lhs; B){
-                            //S @ (K @ f) @ (B @ g @ h) => B* @ f @ g @ h
-                            let bstar_and_f = AstNode::App(ptr!(AstNode::B_), ptr!(f_rhs.borrow().clone()));
-                            let bstar_and_f_and_g = AstNode::App(ptr!(bstar_and_f), ptr!( g_lhs_child_rhs.borrow().clone()));
-
-                            set_app_child_value!(lhs(top) = bstar_and_f_and_g);
-                            set_app_child_value!(rhs(top) = g_rhs.borrow().clone());
-
-                        }else{
-                            //No optimizastion is possible
-                            self.left_ancestor_stack.pop();
-                            let top = self.left_ancestor_stack.last().unwrap().clone();
-                            let x = get_app_child!(rhs(top));
-
-                            //Create ( f @ x) and ( g @ x)
-                            let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
-                            let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
-                            set_app_child_value!(lhs(top) = f_and_x);
-                            set_app_child_value!(rhs(top) = g_and_x);
-                        }
-                    }else{
-                        //S @ (K @ f) @ g => B @ f @ g
-                        let b_and_f_rhs =
-                            AstNode::App(ptr!(AstNode::B), ptr!(f_rhs.borrow().clone()));
-
-                        set_app_child_value!(lhs(top) = b_and_f_rhs);
-                        set_app_child_value!(rhs(top) = g.borrow().clone());
-                    }
-                }else if match_astnode!(g; I){
-                    //S @ (K @ f) @ I => f
-                    self.left_ancestor_stack.pop();
-                    let top = self.left_ancestor_stack.last().unwrap().clone();
-                    set_app_child_value!(lhs(top) = f_rhs.borrow().clone());
-                   // self.left_ancestor_stack.push(f_rhs);
-                }else{
-                    //S @ (K @ f) @ g => B @ f @ g
-                    let b_and_f_rhs =
-                        AstNode::App(ptr!(AstNode::B), ptr!(f_rhs.borrow().clone()));
-
-                    set_app_child_value!(lhs(top) = b_and_f_rhs);
-                    set_app_child_value!(rhs(top) = g.borrow().clone());
-
-                }
-            }else if match_astnode!(f_lhs; app){
-               //
-                let f_lhs_child_lhs = get_app_child!(lhs(f_lhs));
-                let f_lhs_child_rhs = get_app_child!(rhs(f_lhs));
-                if  match_astnode!(f_lhs_child_lhs; B){
-                    if match_astnode!(g ; app){
-                        let g_rhs = get_app_child!(rhs(g));
-                        let g_lhs = get_app_child!(lhs(g));
-                        if match_astnode!(g_lhs; K) {
-                            // S @ ( B @ f @ g) @ (K @ h) => C' @ f @ g @ h
-                            let c_and_f = AstNode::App(
-                                ptr!(AstNode::C_),
-                                ptr!(f_lhs_child_rhs.borrow().clone()),
-                            );
-                            let c_and_f_and_f =
-                                AstNode::App(ptr!(c_and_f), ptr!(f_rhs.borrow().clone()));
-
-                            set_app_child_value!(lhs(top) = c_and_f_and_f);
-                            set_app_child_value!(rhs(top) = g_rhs.borrow().clone());
-                        }else{
-                            // S @ ( B @ f @ g) @ h => S' @ f @ g @ h
-                            let s_and_f = AstNode::App(
-                                ptr!(AstNode::S_),
-                                ptr!(f_lhs_child_rhs.borrow().clone()),
-                            );
-                            let s_and_f_and_f =
-                                AstNode::App(ptr!(s_and_f), ptr!(f_rhs.borrow().clone()));
-
-                            set_app_child_value!(lhs(top) = s_and_f_and_f);
-                            set_app_child_value!(rhs(top) = g.borrow().clone());
-                        }
-                    }else{
-                        // S @ ( B @ f @ g) @ h => S' @ f @ g @ h
-                        let s_and_f = AstNode::App(
-                            ptr!(AstNode::S_),
-                            ptr!(f_lhs_child_rhs.borrow().clone()),
+                        let f_at_g = AstNode::App(
+                            ptr!(x_rhs.borrow().clone()),
+                            ptr!(y_rhs.borrow().clone()),
                         );
-                        let s_and_f_and_f =
-                            AstNode::App(ptr!(s_and_f), ptr!(f_rhs.borrow().clone()));
-
-                        set_app_child_value!(lhs(top) = s_and_f_and_f);
-                        set_app_child_value!(rhs(top) = g.borrow().clone());
+                        set_app_child_value!(rhs(top) = f_at_g);
+                    } else if match_astnode!(y_lhs; app)
+                        && match_astnode!(get_app_child!(lhs(y_lhs)); B)
+                    {
+                        // Rule 3; S @ (K @ f) @ (B @ g @ h) ~> B* @ f @ g @ h
+                        // f = x_rhs, g = y_lhs_rhs, h = y_rhs
+                        let y_lhs_rhs = get_app_child!(rhs(y_lhs));
+                        let b_at_f = AstNode::App(ptr!(AstNode::B_), ptr!(x_rhs.borrow().clone()));
+                        let b_at_f_at_g =
+                            AstNode::App(ptr!(b_at_f), ptr!(y_lhs_rhs.borrow().clone()));
+                        set_app_child_value!(lhs(top) = b_at_f_at_g);
+                        set_app_child_value!(rhs(top) = y_rhs.borrow().clone());
+                    } else {
+                        self.left_ancestor_stack.pop();
+                        eval_s(x, y, self.left_ancestor_stack.last().unwrap().clone());
                     }
-                }else{
-                    //No optimizastion is possible
-                    self.left_ancestor_stack.pop();
-                    let top = self.left_ancestor_stack.last().unwrap().clone();
-                    let x = get_app_child!(rhs(top));
-
-                    //Create ( f @ x) and ( g @ x)
-                    let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
-                    let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
-                    set_app_child_value!(lhs(top) = f_and_x);
-                    set_app_child_value!(rhs(top) = g_and_x);
+                } else if match_astnode!(y; I) {
+                    // Rule 2: S @ (K @ f) @ I
+                    // f = x_rhs
+                    *top.borrow_mut() = x_rhs.borrow().clone();
+                } else {
+                    // Rule 4: S @ (K @ f) @ g ~> B @ f @ g
+                    // x = (K @ f), g = y, x_rhs = f
+                    let b_at_f = AstNode::App(ptr!(AstNode::B), ptr!(x_rhs.borrow().clone()));
+                    set_app_child_value!(lhs(top) = b_at_f);
                 }
-            }
-        }else{
-            if match_astnode!(g; app){
-                let g_rhs = get_app_child!(rhs(g));
-                let g_lhs = get_app_child!(rhs(g));
-                if match_astnode!(g_lhs; K){
-                    //(S @ f) @ ( K @ g) => C @ f @ g
-                    let c_and_f =
-                        AstNode::App(ptr!(AstNode::C), ptr!(f.borrow().clone()));
-
-                    set_app_child_value!(lhs(top) = c_and_f);
-                    set_app_child_value!(rhs(top) = g_rhs.borrow().clone());
-                }else{
-                    //No optimizastion is possible
+            } else if match_astnode!(x_lhs; app) {
+                let x_lhs_lhs = get_app_child!(lhs(x_lhs));
+                let x_lhs_rhs = get_app_child!(rhs(x_lhs));
+                if match_astnode!(x_lhs_lhs; B) {
+                    if match_astnode!(y; app) && match_astnode!(get_app_child!(lhs(y)); K) {
+                        // Rule 5: S @ (B @ f @ g) @ (K @ h) ~> C' @ f @ g @ h
+                        // f = x_lhs_rhs, g = x_rhs, h = y_rhs
+                        let y_rhs = get_app_child!(rhs(y));
+                        let c_at_f_at_g = AstNode::App(
+                            ptr!(AstNode::App(
+                                ptr!(AstNode::C_),
+                                ptr!(x_lhs_rhs.borrow().clone())
+                            )),
+                            ptr!(x_rhs.borrow().clone()),
+                        );
+                        set_app_child_value!(lhs(top) = c_at_f_at_g);
+                        set_app_child_value!(rhs(top) = y_rhs.borrow().clone());
+                    } else {
+                        // Rule 7: S @ (B @ f @ g) @ h ~> S' @ f @ g @ h
+                        // f = x_lhs_rhs, g = x_rhs, h = y
+                        let s_at_f_at_g = AstNode::App(
+                            ptr!(AstNode::App(
+                                ptr!(AstNode::S_),
+                                ptr!(x_lhs_rhs.borrow().clone())
+                            )),
+                            ptr!(x_rhs.borrow().clone()),
+                        );
+                        set_app_child_value!(lhs(top) = s_at_f_at_g);
+                    }
+                } else {
                     self.left_ancestor_stack.pop();
-                    let top = self.left_ancestor_stack.last().unwrap().clone();
-                    let x = get_app_child!(rhs(top));
-
-                    //Create ( f @ x) and ( g @ x)
-                    let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
-                    let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
-                    set_app_child_value!(lhs(top) = f_and_x);
-                    set_app_child_value!(rhs(top) = g_and_x);
+                    eval_s(x, y, self.left_ancestor_stack.last().unwrap().clone());
                 }
-            }else{
-                //No optimizastion is possible
+            } else {
                 self.left_ancestor_stack.pop();
-                let top = self.left_ancestor_stack.last().unwrap().clone();
-                let x = get_app_child!(rhs(top));
-
-                //Create ( f @ x) and ( g @ x)
-                let f_and_x = AstNode::App(ptr!(f.borrow().clone()), ptr!(x.borrow().clone()));
-                let g_and_x = AstNode::App(ptr!(g.borrow().clone()), ptr!(x.borrow().clone()));
-                set_app_child_value!(lhs(top) = f_and_x);
-                set_app_child_value!(rhs(top) = g_and_x);
+                eval_s(x, y, self.left_ancestor_stack.last().unwrap().clone());
+            }
+        } else {
+            if match_astnode!(y; app) && match_astnode!(get_app_child!(lhs(y)); K) {
+                // Rule 6: S @ f @ (K @ g) ~> C @ f @ g
+                // f = x, g = y_rhs
+                let y_rhs = get_app_child!(rhs(y));
+                let c_at_f = AstNode::App(ptr!(AstNode::C), ptr!(x.borrow().clone()));
+                set_app_child_value!(lhs(top) = c_at_f);
+                set_app_child_value!(rhs(top) = y_rhs.borrow().clone());
+            } else {
+                self.left_ancestor_stack.pop();
+                eval_s(x, y, self.left_ancestor_stack.last().unwrap().clone());
             }
         }
-        // getting the left and right child of f and g
-
-        //define astnode K and B for pattern matching
-       /* let k = ptr!(AstNode::K);
-        let b = ptr!(AstNode::B);
-        //match the optimatzation rules
-        match f.borrow().clone() {
-            // f = K @ f
-            AstNode::App(k, _) => {
-                match g.borrow().clone() {
-                    AstNode::App(k, _) => {
-                        //S @ (K @ f) @ (K @ g) =>  K @ (f @ g)
-
-                        let f_rhs_and_g_rhs = AstNode::App(
-                            ptr!(f_rhs.borrow().clone()),
-                            ptr!(g_rhs.borrow().clone()),
-                        );
-                        set_app_child_value!(lhs(top) = AstNode::K);
-                        set_app_child_value!(rhs(top) = f_rhs_and_g_rhs);
-                    }
-                    AstNode::I => {
-                        //S @ (K @ f) @ I => f
-                        let top = f_rhs.borrow().clone();
-                        self.left_ancestor_stack.push(ptr!(top));
-                    }
-                    _ => {
-                        //S @ (K @ f) @ g => B @ f @ g
-                        let b_and_f_rhs =
-                            AstNode::App(ptr!(AstNode::B), ptr!(f_rhs.borrow().clone()));
-
-                        set_app_child_value!(lhs(top) = b_and_f_rhs);
-                        set_app_child_value!(rhs(top) = g.borrow().clone());
-                    }
-                }
-            }
-
-            _ => {
-                match f_lhs.borrow().clone() {
-                    // f = B @ f @ g
-                    AstNode::App(b, _) => {
-                        let f_botton_rhs = get_app_child!(rhs(f_lhs));
-
-                        match g.borrow().clone() {
-                            AstNode::App(k, _) => {
-                                // S @ ( B @ f @ g) @ (K @ h) => C' @ f @ g @ h
-                                let c_and_f = AstNode::App(
-                                    ptr!(AstNode::C_),
-                                    ptr!(f_botton_rhs.borrow().clone()),
-                                );
-                                let c_and_f_and_f =
-                                    AstNode::App(ptr!(c_and_f), ptr!(f_rhs.borrow().clone()));
-
-                                set_app_child_value!(lhs(top) = c_and_f_and_f);
-                                set_app_child_value!(rhs(top) = g_rhs.borrow().clone());
-                            }
-                            _ => {
-                                // S @ ( B @ f @ g) @ h => S' @ f @ g @ h
-                                let s_and_f = AstNode::App(
-                                    ptr!(AstNode::S_),
-                                    ptr!(f_botton_rhs.borrow().clone()),
-                                );
-                                let s_and_f_and_f =
-                                    AstNode::App(ptr!(s_and_f), ptr!(f_rhs.borrow().clone()));
-
-                                set_app_child_value!(lhs(top) = s_and_f_and_f);
-                                set_app_child_value!(rhs(top) = g.borrow().clone());
-                            }
-                        }
-                    }
-                    //
-                    _ => {
-                        // f = f
-                        match g.borrow().clone() {
-                            AstNode::App(k, rhs) => {
-                                //(S @ f) @ ( K @ g) => C @ f @ g
-                                let s_and_f =
-                                    AstNode::App(ptr!(AstNode::C), ptr!(f_rhs.borrow().clone()));
-
-                                set_app_child_value!(lhs(top) = s_and_f);
-                                set_app_child_value!(rhs(top) = rhs.borrow().clone());
-                            }
-                            _ => {
-                                // (f @ x) @ (g @ x)
-                                let top = self.left_ancestor_stack.last().unwrap().clone();
-                                let x = get_app_child!(rhs(top));
-                                let f_and_x = AstNode::App(
-                                    ptr!(f.borrow().clone()),
-                                    ptr!(x.borrow().clone()),
-                                );
-                                let g_and_x = AstNode::App(
-                                    ptr!(g.borrow().clone()),
-                                    ptr!(x.borrow().clone()),
-                                );
-                                set_app_child_value!(lhs(top) = f_and_x);
-                                set_app_child_value!(rhs(top) = g_and_x);
-                                //println!("hier, {}", &*top.borrow());
-                            }
-                        }
-                    }
-                }
-            }
-        };*/
         Ok(())
     }
 
-    fn reduce_K(&mut self) -> Result<(), SaslError> {
+    fn eval_k(&mut self) -> Result<(), SaslError> {
         //I @ x
         let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         //self.left_ancestor_stack.pop();
         let mut top = self.left_ancestor_stack.last().unwrap().clone();
         //Build
 
-        set_app_child_value!(rhs(&mut top) = (x.borrow().clone()));
+        set_app_child_value!(rhs(&mut top) = x.borrow().clone());
         set_app_child_value!(lhs(top) = AstNode::I);
         Ok(())
     }
 
-    pub fn reduce_I(&mut self) -> Result<(), SaslError> {
+    pub fn eval_i(&mut self) -> Result<(), SaslError> {
         //x
         let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         self.left_ancestor_stack.push(x);
         Ok(())
     }
     //reduce binary operations
-    fn reduce_binary(&mut self, op: &Type) -> Result<(), SaslError> {
+    fn eval_binary(&mut self, op: &Type) -> Result<(), SaslError> {
         //println!("stack,{}", &self.left_ancestor_stack.last().unwrap().borrow().clone());
         let lhs = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         //println!("stack,{}", &self.left_ancestor_stack.last().unwrap().borrow().clone());
@@ -786,40 +632,71 @@ impl ReductionMachine {
             let num_rhs = get_const_val!(rhs; number);
 
             match op {
-                T![+] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Number(num_lhs + num_rhs))
-                ),
-                T![-] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Number(num_lhs - num_rhs))
-                ),
-                T![*] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Number(num_lhs * num_rhs))
-                ),
-                T![/] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Number(num_lhs / num_rhs))
-                ),
-                T![=] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs == num_rhs))
-                ),
-                T![~=] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs != num_rhs))
-                ),
-                T![<] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs < num_rhs))
-                ),
-                T![<=] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs <= num_rhs))
-                ),
-                T![>] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs > num_rhs))
-                ),
-                T![>=] => set_app_child_value!(
-                    rhs(top) = AstNode::Constant(Type::Boolean(num_lhs >= num_rhs))
-                ),
-
-                _ => panic!(),
+                T![+] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Number(num_lhs + num_rhs))
+                    );
+                    Ok(())
+                }
+                T![-] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Number(num_lhs - num_rhs))
+                    );
+                    Ok(())
+                }
+                T![*] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Number(num_lhs * num_rhs))
+                    );
+                    Ok(())
+                }
+                T![/] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Number(num_lhs / num_rhs))
+                    );
+                    Ok(())
+                }
+                T![=] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs == num_rhs))
+                    );
+                    Ok(())
+                }
+                T![~=] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs != num_rhs))
+                    );
+                    Ok(())
+                }
+                T![<] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs < num_rhs))
+                    );
+                    Ok(())
+                }
+                T![<=] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs <= num_rhs))
+                    );
+                    Ok(())
+                }
+                T![>] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs > num_rhs))
+                    );
+                    Ok(())
+                }
+                T![>=] => {
+                    set_app_child_value!(
+                        rhs(top) = AstNode::Constant(Type::Boolean(num_lhs >= num_rhs))
+                    );
+                    Ok(())
+                }
+                _ => self.throw_compile_err(&format!(
+                    "Expected arithmetic operation. Found {} instead.",
+                    &op
+                )),
             }
-            Ok(())
             // Eval binary logic operators
         } else if check_type!(&lhs; boolean) && check_type!(&rhs; boolean) {
             let bool_lhs = get_const_val!(lhs; boolean);
@@ -849,10 +726,13 @@ impl ReductionMachine {
                     );
                     Ok(())
                 }
-                _ => self.throw_compile_err("This Operation ist not possible on Boolean Value"),
+                _ => self.throw_compile_err(&format!(
+                    "Expected binary logic operator (=, ~=, and, or). Found {} instead.",
+                    &op
+                )),
             }
-            // Eval comparions with Nil!
-            //both Paramter are nil
+        // Eval comparions with Nil!
+        //both Paramter are nil
         } else if check_type!(&lhs; nil) && check_type!(&rhs; nil) {
             match op {
                 T![=] => {
@@ -866,7 +746,7 @@ impl ReductionMachine {
                 _ => self.throw_compile_err("This Operation ist not possible on Nil"),
             }
 
-            //Only one Parameter ist nil
+        //Only one Parameter ist nil
         } else if check_type!(&lhs; nil) || check_type!(&rhs; nil) {
             match op {
                 T![=] => {
@@ -884,7 +764,7 @@ impl ReductionMachine {
         }
     }
     //eval unary oparions
-    fn reduce_unary(&mut self) -> Result<(), SaslError> {
+    fn eval_unary(&mut self) -> Result<(), SaslError> {
         // (not @ bool) ? not already borrowed !!
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let rhs = get_app_child!(rhs(top));
@@ -903,7 +783,7 @@ impl ReductionMachine {
         }
     }
     //reduce if conditions
-    fn reduce_cond(&mut self) -> Result<(), SaslError> {
+    fn eval_cond(&mut self) -> Result<(), SaslError> {
         //gets the boolean predicate
         let predicate = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
@@ -932,7 +812,7 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_hd(&mut self) -> Result<(), SaslError> {
+    fn eval_hd(&mut self) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
 
         let pair = get_app_child!(rhs(top));
@@ -949,7 +829,7 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_tl(&mut self) -> Result<(), SaslError> {
+    fn eval_tl(&mut self) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let pair = get_app_child!(rhs(top));
         //reduce list to pair
@@ -966,14 +846,10 @@ impl ReductionMachine {
         Ok(())
     }
     //reduce a list
-    fn reduce_cons(&mut self) -> Result<(), SaslError> {
+    fn eval_cons(&mut self) -> Result<(), SaslError> {
         let x = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
         let top = self.left_ancestor_stack.last().unwrap().clone();
         let y = get_app_child!(rhs(top));
-        // I @ Pair(x,y)
-        //println!("dort, {}", &*top.borrow());
-        //println!("dort, {}", &*x.borrow());
-        //println!("dort, {}", &*y.borrow());
 
         set_app_child_value!(lhs(top) = AstNode::I);
         //make a list to a pair
@@ -985,21 +861,21 @@ impl ReductionMachine {
         Ok(())
     }
 
-    fn reduce_global_defs(&mut self, s: String, def_pos: DefPosition) -> Result<(), SaslError> {
+    fn insert_global_def(&mut self, s: String, def_pos: DefPosition) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
         //look into Hashmap
         let x = self
             .ast
             .global_defs
             .get(&s)
-            .unwrap_or_else(|| panic!())
+            .unwrap_or_else(|| panic!("Could not find global definition for {}.", &s))
             .1
             .deref()
             .borrow()
             .clone();
         match def_pos {
             DefPosition::Lhs => set_app_child_value!(lhs(top) = x),
-            DefPosition::Rhs => set_app_child_value!(rhs(top) = x)
+            DefPosition::Rhs => set_app_child_value!(rhs(top) = x),
         }
         Ok(())
     }
@@ -1007,34 +883,50 @@ impl ReductionMachine {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use super::*;
     use crate::backend::compiler::compile;
     use crate::frontend::{lexer::*, parser::*};
 
-    fn compile_to_ast(code: &str) -> Ast {
+    fn evaluate(code: &str) -> String {
         let mut ast = Parser::new(Lexer::new(code).tokenize().unwrap())
             .parse()
             .unwrap();
-        compile(&mut ast);
-        ast
+        compile(&mut ast).unwrap();
+        let mut vm = ReductionMachine::new(ast, true);
+        vm.reduce().unwrap();
+        vm.print_result().unwrap()
     }
+
     #[test]
-    fn test_check_reduction() {
-        let mut ast = compile_to_ast(
-            "def incr x = 1 + x \
-     def err x = if x > 2 then true else err x+1 \
-     def test = if 12 > 12-0 then true else false \
-     def plus x y = x+y \
-     . incr 3\
-     . err 0\
-     . plus 4 3",
+    fn test_simple_operations() {
+        let result = evaluate( "1 + 6 * 5 / 3");
+        assert_eq!(result, "11");
+
+        let result = evaluate("[1,2,3] ~= nil");
+        assert_eq!(result, "true");
+
+        let result = evaluate("hd [1,2,\"ab\", false]");
+        assert_eq!(result, "1");
+
+        let result = evaluate("tl (hd [[1,2,3],4])");
+        assert_eq!(result, "[2, 3]");
+
+        let result = evaluate("a or b where a = true; b = false");
+        assert_eq!(result, "true");
+
+        let result = evaluate("1 / 3 > 0.33");
+        assert_eq!(result, "true");
+    }
+
+    #[test]
+    fn test_complex_programs() {
+        let program = std::fs::read_to_string("reference-bin/example.sasl").unwrap();
+        assert_eq!(evaluate(&program), "5050");
+
+        let program = std::fs::read_to_string("reference-bin/sieve.sasl").unwrap();
+        assert_eq!(
+            evaluate(&program),
+            "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]"
         );
-        let ast = ReductionMachine::new(ast).reduce().unwrap();
-        assert_eq!(ast.to_string(), "Number:4");
-        assert_eq!(ast.to_string(), "true");
-        assert_eq!(ast.to_string(), "true");
-        assert_eq!(ast.to_sting(), "Number:7")
     }
 }
