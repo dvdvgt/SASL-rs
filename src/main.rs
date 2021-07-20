@@ -107,7 +107,7 @@ pub fn run(src: &str, args: &ArgMatches) {
     let mut expr = expr.unwrap();
     compiler::compile(&mut expr).unwrap();
     // Eval
-    let mut reductor = ReductionMachine::new(expr);
+    let mut reductor = ReductionMachine::new(expr,true);
     reductor.reduce().unwrap();
     println!("{}", reductor.print_result().unwrap());
 }
