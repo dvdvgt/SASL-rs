@@ -59,14 +59,14 @@ The compiler features a simple REPL environment which can be started by just run
         if (n = 0) or (n = 1) then 1
         else (fib (n-1)) + (fib (n-2))
     .
-    fib 20 // = 10946
+    fib 20
     ```
 2. Currying
     ```
     def plus x y = x + y
     def incr = plus 1
     .
-    incr 5 // = 6
+    incr 5
     ```
 3. Lazy evaluation in action
     ```
@@ -82,7 +82,39 @@ The compiler features a simple REPL environment which can be started by just run
     // Defines infinite list [1, 2, ...]
     def naturalNumbers n = n : (naturalNumbers (n+1))
     .
-    sum (take 5 (naturalNumbers 1)) // = 15
+    sum (take 5 (naturalNumbers 1))
+    ```
+4. A more elaborate example for computing a list of prime numbers using *sieve of eratosthenes*:
+    - Note the use of functions as first-class-citiziens
+    - The use of lazy evaluation
+    ```
+    def sieve = go (tl naturalNumbers)
+    where
+        go xs = (hd xs) : (go (filter (notDivableBy (hd xs)) xs))
+    def naturalNumbers = next 0
+        where 
+            next x = (x + 1) : (next (x + 1))
+    def filter p l = 
+        if l = nil 
+        then nil
+        else 
+            if p x 
+            then x:(filter p xs)
+            else filter p xs
+                where 
+                    x  = hd l;
+                    xs = tl l
+    def take n xs = 
+        if n = 0 then nil 
+        else x : take (n - 1) ys
+        where 
+            ys = tl xs;
+            x = hd xs
+    def mod x y = if x < y then x else mod (x-y) y
+    def flip f x y = f y x
+    def notDivableBy x y = (flip mod x y) ~= 0
+    .
+    take 50 sieve
     ```
 
 # Benchmarks
@@ -90,8 +122,47 @@ The following benchmarks were conducted using [Hyperfine](https://github.com/sha
 ```
 hyperfine --warumup 3 './sasl -c [FILE.sasl]'
 ```
-1. Naive Fibonacci algorithm with `fib 20`:
+1. Naive Fibonacci algorithm shown in the examples: `fib 25` \
+    Without optimizations:
     ```
-    Time (mean ± σ):     124.4 ms ±  13.5 ms    [User: 123.7 ms, System: 1.0 ms]
-    Range (min … max):   114.3 ms … 147.9 ms    24 runs
+    Time (mean ± σ):      1.385 s ±  0.037 s    [User: 1.385 s, System: 0.001 s]
+    Range (min … max):    1.318 s …  1.431 s    10 runs
+    ```
+    With optimizations ~11% faster:
+    ```
+    Time (mean ± σ):      1.229 s ±  0.026 s    [User: 1.227 s, System: 0.002 s]
+    Range (min … max):    1.196 s …  1.266 s    10 runs
+    ```
+2. Computing the first 50 prime numbers using the sieve of eratosthenes implementation shown in the examples: `take 50 sieve` \
+    Without optimizations:
+    ```
+    Time (mean ± σ):     824.3 ms ±  21.8 ms    [User: 818.6 ms, System: 4.6 ms]
+    Range (min … max):   801.5 ms … 850.1 ms    10 runs
+    ```
+    With optimizations ~42% faster:
+    ```
+    Time (mean ± σ):     477.8 ms ±  17.5 ms    [User: 475.6 ms, System: 2.1 ms]
+    Range (min … max):   454.4 ms … 510.5 ms    10 runs
+    ```
+3. Computing the ackermann function:
+    ```
+    def ackermann m n = 
+    if m > 0 and n = 0 
+        then (ackermann (m-1) 1) 
+    else 
+        if m > 0 and n > 0
+            then (ackermann (m-1) (ackermann m (n-1))) 
+        else n+1
+    .
+    ackermann 3 4
+    ```
+    Without optimizations:
+    ```
+    Time (mean ± σ):     380.9 ms ±  16.7 ms    [User: 378.9 ms, System: 2.2 ms]
+    Range (min … max):   354.5 ms … 402.9 ms    10 runs
+    ```
+    With optimizations ~35% faster:
+    ```
+    Time (mean ± σ):     247.0 ms ±  13.4 ms    [User: 246.1 ms, System: 1.5 ms]
+    Range (min … max):   230.7 ms … 268.1 ms    11 runs
     ```
