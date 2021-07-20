@@ -30,7 +30,12 @@ fn main() {
         .arg(Arg::new("verbose")
             .short('v')
             .about("Output tokens as well as the AST. Useful for debugging.")
-            .takes_value(false)).get_matches();
+            .takes_value(false))
+        .arg(Arg::new("optimize")
+            .short('o')
+            .takes_value(false)
+            .about("Activate optimizations."))
+        .get_matches();
 
     match matches.value_of("compile") {
         Some(x) => run_file(x, &matches),
@@ -107,7 +112,9 @@ pub fn run(src: &str, args: &ArgMatches) {
     let mut expr = expr.unwrap();
     compiler::compile(&mut expr).unwrap();
     // Eval
-    let mut reductor = ReductionMachine::new(expr);
-    reductor.reduce().unwrap();
-    println!("{}", reductor.print_result().unwrap());
+    let mut reductor = ReductionMachine::new(expr, args.is_present("optimize"));
+    match reductor.reduce() {
+        Ok(_) => println!("{}", reductor.print_result().unwrap()),
+        Err(e) => eprintln!("{}", e)
+    }
 }

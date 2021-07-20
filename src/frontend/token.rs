@@ -98,9 +98,9 @@ impl fmt::Display for Type {
             f,
             "{}",
             match self {
-                Type::String(x) => format!("String:{}", x),
-                Type::Number(x) => format!("Number:{}", x),
-                Type::Boolean(x) => format!("Boolean:{}", x),
+                Type::String(x) => format!("\"{}\"", x),
+                Type::Boolean(x) => format!("{}", x),
+                Type::Number(x) => format!("{}", x),
                 T![nil] => "nil".to_string(),
                 T![def] => "def".to_string(),
                 T![where] => "where".to_string(),

@@ -1,10 +1,9 @@
 //! Contains a simple DOT parser used for creating PDFs with the visualized AST.
 
-use super::ast::{Ast, AstNode, AstNodePtr, Op};
+use super::ast::{Ast, AstNode, AstNodePtr, Identifier, Op, Params};
 use super::visualize::graph::{Edge, Graph, Node};
 use crate::frontend::token::Type;
 
-use std::collections::hash_map;
 use std::{
     fs::File,
     io::Write,
@@ -40,7 +39,7 @@ impl Visualizer {
     fn add_definition(
         &mut self,
         def_root_id: String,
-        defs: hash_map::Iter<'_, String, (Option<Vec<String>>, AstNodePtr)>,
+        defs: &Vec<(Identifier, (Params, AstNodePtr))>,
     ) {
         for (def, (params, ast_node)) in defs {
             let mut def_name = def.clone();
@@ -72,7 +71,11 @@ impl Visualizer {
         // Create root node
         let system_id = self.get_next_id();
         self.add_node("Prog".to_string());
-        self.add_definition(system_id.clone(), ast.global_defs.iter());
+        let mut defs = vec![];
+        ast.global_defs.iter()
+            .for_each(|(id, (p, body))| defs.push((id.clone(), (p.clone(), body.clone()))));
+
+        self.add_definition(system_id.clone(), &defs);
         // Visualize program body expression and add edge to the root.
         self.add_edge(&system_id, &self.get_next_id());
         self.visualize_ast_nodes(&ast.body);
@@ -91,12 +94,12 @@ impl Visualizer {
                 self.add_edge(&where_id, &lhs_id);
                 self.visualize_ast_nodes(lhs_expr);
 
-                self.add_definition(where_id, defs.iter());
+                self.add_definition(where_id, &defs);
             }
             // Constants
-            AstNode::Constant(Type::String(x)) => self.add_node(format!("String:{}", x)),
-            AstNode::Constant(Type::Number(x)) => self.add_node(format!("Num:{}", x)),
-            AstNode::Constant(Type::Boolean(x)) => self.add_node(format!("Bool:{}", x)),
+            AstNode::Constant(Type::String(x)) => self.add_node(format!("{}", x)),
+            AstNode::Constant(Type::Number(x)) => self.add_node(format!("{}", x)),
+            AstNode::Constant(Type::Boolean(x)) => self.add_node(format!("{}", x)),
             AstNode::Constant(Type::Nil) => self.add_node("nil".to_string()),
             // Operator
             AstNode::Builtin(Op::InfixOp(op)) | AstNode::Builtin(Op::PrefixOp(op)) => {

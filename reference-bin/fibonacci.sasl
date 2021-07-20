@@ -1,10 +1,10 @@
-def fibs = 1 : 1 : next fibs
+def fibs = 1 : (1 : (next fibs))
     where
-        next xs = ((hd xs) + (scnd xs)) : (next (tl xs));
-            scnd ys = hd (tl ys)
+        next xs = ((hd xs) + (scnd xs)) : (next (tl xs))
+            where scnd ys = hd (tl ys)
 def take n xs = 
     if n = 0 then nil 
-    else x : take (n - 1) ys
+    else x : (take (n - 1)) ys
     where 
         ys = tl xs;
         x = hd xs
@@ -13,4 +13,4 @@ def last xs =
     if (tl xs) = nil then hd xs
     else last (tl xs)
 .
-fib 10
+take 20 fibs

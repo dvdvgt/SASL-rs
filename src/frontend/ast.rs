@@ -89,7 +89,7 @@ impl Default for Ast {
 ///     implementation but never actually stored in the AST.
 #[derive(Debug, Clone)]
 pub enum AstNode {
-    Where(AstNodePtr, HashMap<Identifier, (Params, AstNodePtr)>),
+    Where(AstNodePtr, Vec<(Identifier, (Params, AstNodePtr))>),
     /// Function application used for currying functions
     App(AstNodePtr, AstNodePtr),
     // Variable/function identifier
@@ -122,18 +122,14 @@ impl fmt::Display for AstNode {
             match self {
                 //AstNode::Where(Some(expr), _, Some(nested_where)) =>
                 //format!("{} where {}", expr, nested_where),
-                AstNode::Where(expr, _) => format!("{} where", expr.deref().borrow()),
+                AstNode::Where(expr, defs) => format!("{} where {:?}", expr.borrow(), defs),
                 //AstNode::Where(None, _, None) => "where".to_string(),
                 AstNode::App(ast1, ast2) =>
-                    format!("({} @ {})", ast1.deref().borrow(), ast2.deref().borrow()),
+                    format!("({} @ {})", ast1.borrow(), ast2.borrow()),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
-
                 AstNode::Pair(a, b) =>
-                    format!("({} @_pair {})", a.deref().borrow(), b.deref().borrow()),
-
-                AstNode::Pair(a, b) => format!("({} @ {})", a.deref().borrow(), b.deref().borrow()),
-
+                    format!("({} @_pair {})", a.borrow(), b.borrow()),
                 AstNode::Builtin(op) => op.to_string(),
                 AstNode::Empty => "empty".to_string(),
                 AstNode::S => "S".to_string(),

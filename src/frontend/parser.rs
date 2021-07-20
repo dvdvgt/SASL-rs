@@ -26,6 +26,7 @@ type ParserResult = Result<AstNodePtr, SaslError>;
 /// Defs is a hashmap where each entry is a mapping of an identifier (constant or function name)
 /// to the corresponding vector of optional parameter names and the constant/function body.
 type Defs = HashMap<Identifier, (Params, AstNodePtr)>;
+type LocalDefs = Vec<(Identifier, (Params, AstNodePtr))>;
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: VecDeque<Token<'a>>) -> Self {
@@ -144,19 +145,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_defs(&mut self) -> Result<Defs, SaslError> {
-        let mut defs = HashMap::new();
+    fn parse_defs(&mut self) -> Result<LocalDefs, SaslError> {
+        let mut defs = vec![];
         let (Def { name, params }, ast) = self.parse_def()?;
-        defs.insert(name, (params, ast));
+        defs.push((name, (params, ast)));
         self.parse_defs1(&mut defs)?;
         Ok(defs)
     }
 
-    fn parse_defs1(&mut self, defs: &mut Defs) -> Result<(), SaslError> {
+    fn parse_defs1(&mut self, defs: &mut LocalDefs) -> Result<(), SaslError> {
         if self.expect_type(T![;]) {
             self.consume(&T![;]);
             let (Def { name, params }, ast) = self.parse_def()?;
-            defs.insert(name, (params, ast));
+            defs.push((name, (params, ast)));
             self.parse_defs1(defs)
         } else {
             Ok(())
@@ -469,57 +470,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_prefix(&mut self) -> ParserResult {
-        match self.peek() {
-            T![-] | T![+] | T![not] => {
-                let token = self.next().unwrap();
-                Ok(ptr!(AstNode::Builtin(Op::PrefixOp(token.typ))))
-            }
-            _ => {
-                let token = self.next().unwrap();
-                Err(ParseError {
-                    pos: token.pos,
-                    msg: format!(
-                        "Expected prefix operator (+, -, not) but found {}.",
-                        token.typ
-                    ),
-                })
-            }
-        }
-    }
-
-    fn parse_addop(&mut self) -> ParserResult {
-        match self.peek() {
-            T![+] | T![-] => {
-                let token = self.next().unwrap();
-                Ok(ptr!(AstNode::Builtin(Op::InfixOp(token.typ))))
-            }
-            _ => {
-                let token = self.next().unwrap();
-                Err(ParseError {
-                    pos: token.pos,
-                    msg: format!("Expected infix operator (+, -) but found {}.", token.typ),
-                })
-            }
-        }
-    }
-
-    fn parse_mulop(&mut self) -> ParserResult {
-        match self.peek() {
-            T![*] | T![/] => {
-                let op = self.next().unwrap().typ;
-                Ok(ptr!(AstNode::Builtin(Op::InfixOp(op))))
-            }
-            _ => {
-                let token = self.next().unwrap();
-                Err(ParseError {
-                    pos: token.pos,
-                    msg: format!("Expected infix operator (*, /) but found {}.", token.typ),
-                })
-            }
-        }
-    }
-
     fn parse_relop(&mut self) -> ParserResult {
         match self.peek() {
             T![=] | T![~=] | T![<] | T![>] | T![<=] | T![>=] => {
@@ -566,17 +516,17 @@ mod tests {
         let expr = parse_expr("[1,2,\"ab\", true, 5.6, id]");
         assert_eq!(
             expr.deref().borrow().to_string(),
-            "((: @ Number:1) @ ((: @ Number:2) @ ((: @ String:ab) @ ((: @ Boolean:true) @ ((: @ Number:5.6) @ ((: @ Id:id) @ nil))))))"
+            "((: @ 1) @ ((: @ 2) @ ((: @ \"ab\") @ ((: @ true) @ ((: @ 5.6) @ ((: @ Id:id) @ nil))))))"
         );
         let expr = parse_expr("1.2 + 2 * 3 - 4 / 5");
         assert_eq!(
             expr.deref().borrow().to_string(),
-            "((- @ ((+ @ Number:1.2) @ ((* @ Number:2) @ Number:3))) @ ((/ @ Number:4) @ Number:5))"
+            "((- @ ((+ @ 1.2) @ ((* @ 2) @ 3))) @ ((/ @ 4) @ 5))"
         );
         let expr = parse_expr("if [1,true,\"a\"] = nil then 1.5 else -2.5");
         assert_eq!(
             expr.deref().borrow().to_string(),
-            "(((cond @ ((= @ ((: @ Number:1) @ ((: @ Boolean:true) @ ((: @ String:a) @ nil)))) @ nil)) @ Number:1.5) @ (- @ Number:2.5))"
+            "(((cond @ ((= @ ((: @ 1) @ ((: @ true) @ ((: @ \"a\") @ nil)))) @ nil)) @ 1.5) @ (- @ 2.5))"
         );
     }
 
@@ -597,7 +547,7 @@ mod tests {
         let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
             astnode.deref().borrow().to_string(),
-            "((+ @ Number:5) @ Number:2)"
+            "((+ @ 5) @ 2)"
         );
 
         let def = &Def {
@@ -607,7 +557,7 @@ mod tests {
         let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
             astnode.deref().borrow().to_string(),
-            "((* @ (- @ Number:2.3)) @ Id:x)"
+            "((* @ (- @ 2.3)) @ Id:x)"
         );
 
         let def = &Def {

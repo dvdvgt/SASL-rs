@@ -7,7 +7,7 @@ use crate::{
     frontend::ast::{self, AstNode, AstNodePtr, Identifier, Op},
     T,
 };
-use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::{cell::RefCell, rc::Rc};
 
 type AbstractorResult = Result<AstNodePtr, SaslError>;
@@ -125,15 +125,17 @@ impl<'a> Abstractor<'a> {
     fn abstract_multiple_where(
         &mut self,
         lhs: &mut AstNodePtr,
-        defs: &mut HashMap<String, (Option<Vec<Identifier>>, AstNodePtr)>,
+        defs: &mut Vec<(String, (Option<Vec<Identifier>>, AstNodePtr))>,
     ) -> Result<AstNodePtr, SaslError> {
         // Abstract all where definitions
         let mut abstracted_defs = vec![];
+        let mut abst;
         for (name, (params, body)) in defs.iter_mut() {
-            self.abstract_single_where(name, params, body)?;
+            abst = Abstractor::new(params);
+            abst.abstract_ids(body)?;
             abstracted_defs.push((name.clone(), Rc::clone(body)));
         }
-        let def_names: Vec<Identifier> = abstracted_defs
+        let def_names: VecDeque<Identifier> = abstracted_defs
             .iter()
             .rev()
             .map(|(name, _)| name.clone())
@@ -163,7 +165,6 @@ impl<'a> Abstractor<'a> {
         if is_recursive {
             let mut rec_defs = ast::apply2(ptr!(AstNode::K), defs_list);
             for def_name in def_names.iter() {
-                println!("{}", def_name);
                 rec_defs = ast::apply2(ptr!(AstNode::U), self.abstract_id(rec_defs, def_name)?);
             }
             rec_defs = ast::apply2(ptr!(AstNode::Y), rec_defs);
@@ -179,7 +180,7 @@ impl<'a> Abstractor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser};
+    use crate::{backend::compiler::compile, frontend::{ast::Ast, lexer::Lexer, parser::Parser, visualize::Visualizer}};
 
     fn parse_to_ast(code: &str) -> Ast {
         Parser::new(Lexer::new(code).tokenize().unwrap())
@@ -199,6 +200,12 @@ mod tests {
         false
     }
 
+    fn compile_(code: &str) -> Ast {
+        let mut ast = parse_to_ast(code);
+        compile(&mut ast).unwrap();
+        ast
+    }
+
     #[test]
     fn test_check_recursion() {
         let mut ast = parse_to_ast("x where f x = g x; g y = f y");
@@ -209,6 +216,15 @@ mod tests {
         assert!(!check_recursion(ast.body));
         ast = parse_to_ast("1 where f x = 5 * x; g x = x; h x = g x");
         assert!(check_recursion(ast.body));
-        ast = parse_to_ast("1 where f x = f x");
+    }
+
+    #[test]
+    fn test_multiple_where() {
+        let mut vis = Visualizer::new("g", false);
+        let ast = compile_("f where f = g; g = 1");
+        vis.visualize_ast(&ast);
+        println!("After compilation: {:?}", &ast);
+        vis.write_to_pdf("test.pdf");
+        //println!("{}", ast.body.borrow());
     }
 }

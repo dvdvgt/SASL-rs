@@ -52,7 +52,7 @@ mod tests {
                 .deref()
                 .borrow()
                 .to_string(),
-            "((S @ ((S @ (K @ +)) @ (K @ Number:1))) @ I)"
+            "((S @ ((S @ (K @ +)) @ (K @ 1))) @ I)"
         );
         assert_eq!(
             ast.global_defs
@@ -72,7 +72,7 @@ mod tests {
                 .deref()
                 .borrow()
                 .to_string(),
-            "((* @ Number:5) @ Number:3)"
+            "((* @ 5) @ 3)"
         );
         assert_eq!(
             ast.global_defs.get("plus").unwrap().1.deref().borrow().to_string(),
@@ -90,7 +90,7 @@ mod tests {
                 .deref()
                 .borrow()
                 .to_string(),
-            ""
+            "((S @ ((S @ ((S @ (K @ cond)) @ ((S @ ((S @ (K @ =)) @ I)) @ (K @ 0)))) @ (K @ 0))) @ ((S @ (K @ Id:rec)) @ ((S @ ((S @ (K @ -)) @ I)) @ (K @ 1))))"
         );
     }
 }

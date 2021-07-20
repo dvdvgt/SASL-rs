@@ -1,6 +1,14 @@
-
-def incr x = x + 1
+def take n xs = 
+    if n = 0 then nil 
+    else x : take (n - 1) ys
+    where 
+        ys = tl xs;
+        x = hd xs
+def sum xs = if xs = nil then 0 else (hd xs) + (sum (tl xs))
+def fib n = if (n=0) or (n=1) then 1 else (fib (n-1)) + (fib (n-2))
+def flip f x y = f y x
+def div x y = if x < y then 0 else 1 + div (x-y) y
+def divByTwo = flip div 2
+def naturals = nat 1 where nat n = n : (nat (n+1))
 .
-incr 41
-
-
+sum (take 100 naturals)

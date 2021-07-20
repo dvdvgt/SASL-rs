@@ -254,7 +254,6 @@ impl ReductionMachine {
         // Main loop of the left ancestor stack. Nodes are pushed onto the stack until a left leaf is reached
         // where the reduction kicks in.
         loop {
-            //println!("{}", &self.ast);
             let top = self.peek_stack();
             match top {
                 // Handle global definitions which are still to be inserted in place of their identifier.
@@ -727,7 +726,7 @@ impl ReductionMachine {
                     Ok(())
                 }
                 _ => self.throw_compile_err(&format!(
-                    "Expected binary logic operator (=, ~=, and, or). Found {} instead.",
+                    "Expected binary logic operation (=, ~=, and, or). Found {} instead.",
                     &op
                 )),
             }
@@ -760,7 +759,7 @@ impl ReductionMachine {
                 _ => self.throw_compile_err("This Operation ist not possible on Nil"),
             }
         } else {
-            self.throw_compile_err("This Operation ist not possible on the variables")
+            self.throw_compile_err(&format!("Compilation error: Unkown binary operation: {}", op))
         }
     }
     //eval unary oparions
@@ -779,14 +778,13 @@ impl ReductionMachine {
             set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(!rhs_val)));
             Ok(())
         } else {
-            self.throw_compile_err("Semantic Error: Expected boolean expression after not")
+            self.throw_compile_err(&format!("Compilation error: Expected boolean expression after not. Found {} instead.", &*rhs.borrow()))
         }
     }
     //reduce if conditions
     fn eval_cond(&mut self) -> Result<(), SaslError> {
         //gets the boolean predicate
         let predicate = get_app_child!(rhs(self.left_ancestor_stack.pop().unwrap()));
-        let top = self.left_ancestor_stack.last().unwrap().clone();
         // reduce predicate to true or false
 
         self.left_ancestor_stack.push(predicate);
