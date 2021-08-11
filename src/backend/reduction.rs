@@ -5,172 +5,8 @@ use crate::{
     error::SaslError,
     frontend::ast::{Ast, AstNode, AstNodePtr, Op},
 };
-use crate::{ptr, T};
+use crate::{ptr, T, set_app_child_value, get_app_child, get_const_val, get_pair_child, match_astnode, check_type};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
-
-macro_rules! get_app_child {
-    (rhs($node:expr)) => {
-        match &*$node.borrow() {
-            AstNode::App(_, rhs) => Rc::clone(rhs),
-            _ => panic!(),
-        }
-    };
-    (lhs($node:expr)) => {
-        match &*$node.borrow() {
-            AstNode::App(lhs, _) => Rc::clone(lhs),
-            _ => panic!(),
-        }
-    };
-}
-
-macro_rules! get_pair_child {
-    (rhs($node:expr)) => {
-        match &*$node.borrow() {
-            AstNode::Pair(_, rhs) => Rc::clone(rhs),
-            _ => panic!("Expected Pair."),
-        }
-    };
-    (lhs($node:expr)) => {
-        match &*$node.borrow() {
-            AstNode::Pair(lhs, _) => Rc::clone(lhs),
-            _ => panic!("Expected Pair."),
-        }
-    };
-}
-
-macro_rules! set_app_child_value {
-    ( rhs($app_node:expr) = $node:expr ) => {
-        if let AstNode::App(_, rhs) = &*$app_node.borrow() {
-            *rhs.borrow_mut() = $node;
-        };
-    };
-    ( lhs($app_node:expr) = $node:expr ) => {
-        if let AstNode::App(lhs, _) = &*$app_node.borrow() {
-            *lhs.borrow_mut() = $node;
-        };
-    };
-}
-
-macro_rules! check_type {
-    ($nodeptr:expr; number) => {
-        if let AstNode::Constant(Type::Number(_)) = &*$nodeptr.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($nodeptr:expr; boolean) => {
-        if let AstNode::Constant(Type::Boolean(_)) = &*$nodeptr.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($nodeptr:expr; nil) => {
-        if let AstNode::Constant(Type::Nil) = &*$nodeptr.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-}
-
-macro_rules! get_const_val {
-    ($node:expr; number) => {
-        if let AstNode::Constant(Type::Number(x)) = &*$node.borrow() {
-            x.clone()
-        } else {
-            panic!("Expected number.")
-        }
-    };
-    ($node:expr; boolean) => {
-        if let AstNode::Constant(Type::Boolean(x)) = &*$node.borrow() {
-            x.clone()
-        } else {
-            panic!("Expected boolean.")
-        }
-    };
-}
-
-macro_rules! match_astnode {
-    ($node:expr; app) => {
-        if let AstNode::App(_, _) = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; S) => {
-        if let AstNode::S = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; K) => {
-        if let AstNode::K = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; I) => {
-        if let AstNode::I = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; Y) => {
-        if let AstNode::Y = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; U) => {
-        if let AstNode::U = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; B) => {
-        if let AstNode::B = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; C) => {
-        if let AstNode::C = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; B_) => {
-        if let AstNode::B_ = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; C_) => {
-        if let AstNode::I = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-    ($node:expr; S_) => {
-        if let AstNode::S_ = &*$node.borrow() {
-            true
-        } else {
-            false
-        }
-    };
-}
 
 /// Specifies where a global definition occured - as the left or right child
 /// of a application node.
@@ -882,8 +718,8 @@ impl ReductionMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::compiler::compile;
     use crate::frontend::{lexer::*, parser::*};
+    use crate::backend::abstractor::compile;
 
     fn evaluate(code: &str) -> String {
         let mut ast = Parser::new(Lexer::new(code).tokenize().unwrap())
@@ -925,6 +761,17 @@ mod tests {
         assert_eq!(
             evaluate(&program),
             "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]"
+        );
+
+        let program = "f where f = g + 1; g = 1";
+        assert_eq!(
+            evaluate(&program),
+            "2"
+        );
+        let program = "f where g = 1; f = g + 1";
+        assert_eq!(
+            evaluate(&program),
+            "2"
         );
     }
 }

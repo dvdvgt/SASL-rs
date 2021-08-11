@@ -3,7 +3,7 @@
 use phf::phf_map;
 use std::fmt;
 
-use super::utils::Position;
+use super::position::Position;
 use crate::T;
 
 /// A token is grouping of single characters (lexeme) with a certain type and

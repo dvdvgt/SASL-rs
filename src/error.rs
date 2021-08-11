@@ -3,7 +3,7 @@
 
 use std::{error::Error, fmt, fmt::Display};
 
-use crate::frontend::utils::Position;
+use crate::frontend::position::Position;
 
 /// A `SaslError` distinguishes between different stages of the compiler so that
 /// different instance of `SaslError` is used in regard to the occurence of the error.

@@ -1,5 +1,9 @@
-//! Structs and functions concerned with generating graphs with Graphviz and DOT language.
-//! Also contains a simple graph implementation.
+//! This module contains a simple graph datastructure which is used for generating for
+//! generating a DOT language representation of an AST. 
+//! 
+//! This proved to be usefull for debugging as the ASTs can get quite large and hard to reason about without proper
+//! formatting. Note how the Display trait implementation features the DOT language syntax. This makes it easy
+//! to convert the graph into the DOT language.
 
 use std::fmt::{self, Display};
 

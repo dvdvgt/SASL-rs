@@ -16,7 +16,7 @@ use std::{collections::VecDeque, iter::Peekable, str::Chars};
 
 use super::{
     token::{Token, Type},
-    utils::Position,
+    position::Position,
 };
 use crate::error::SaslError::{self, SyntaxError};
 use crate::T;
