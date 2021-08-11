@@ -1,0 +1,12 @@
+def take n xs = 
+        if n = 0 then nil 
+        else x : take (n - 1) ys
+            where 
+                ys = tl xs;
+                x = hd xs
+def sum xs = 
+        if xs = nil then 0 
+        else (hd xs) + (sum (tl xs))
+def naturalNumbers n = n : (naturalNumbers (n+1))
+.
+sum (take 5 (naturalNumbers 1))

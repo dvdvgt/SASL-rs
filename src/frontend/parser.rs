@@ -172,7 +172,7 @@ impl<'a> Parser<'a> {
             _ => Err(self.parse_err("Expected identifier for definition.")),
         }
     }
-    // TODO add error handling!!!
+
     fn parse_abstraction(&mut self, mut def: Def) -> Result<(Def, AstNodePtr), SaslError> {
         if self.expect_type(T![=]) {
             self.consume(&T![=]);

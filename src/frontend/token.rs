@@ -11,7 +11,11 @@ use crate::T;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub typ: Type,
+    /// The position represents the relative position of the token in the source
+    /// code.
     pub pos: Position,
+    /// A textual representation of the source code that the token orignated from.
+    /// Used for writting informative error messages.
     pub lexeme: &'a str,
 }
 
@@ -229,6 +233,12 @@ macro_rules! T {
     };
     [else] => {
         $crate::frontend::token::Type::Else
+    };
+    [true] => {
+        $crate::frontend::token::Type::Boolean(true)
+    };
+    [false] => {
+        $crate::frontend::token::Type::Boolean(false)
     };
     [.] => {
         $crate::frontend::token::Type::Dot

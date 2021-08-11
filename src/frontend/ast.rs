@@ -1,5 +1,4 @@
-//! Abstract syntax tree datastructures.
-//! In here are all datastructures needed for creating the AST in the parser, compiler and virtual machine.
+//! This module contains all datastructures needed for creating and modifying the AST in the parser, compiler and virtual machine.
 
 use std::{cell::RefCell, collections::HashMap, fmt, ops::Deref, rc::Rc};
 
@@ -31,6 +30,7 @@ impl Def {
     }
 }
 
+/// A convenience type alias for saving some screen estate and typing.
 pub type AstNodePtr = Rc<RefCell<AstNode>>;
 
 /// A vector of identifiers (strings) which may or may not exist depending on the
@@ -51,8 +51,9 @@ pub type Identifier = String;
 ///     the global definitions by a dot ('.') in the source code.
 #[derive(Debug, Clone)]
 pub struct Ast {
+    /// Contains all global definitions which are accessible by 
+    /// the name (identifier) of the definition.
     pub global_defs: HashMap<Identifier, (Params, AstNodePtr)>,
-    //root: AstNode,
     pub body: AstNodePtr,
 }
 
@@ -87,30 +88,51 @@ impl Default for Ast {
 ///     - Where is how local definition are defined in SASL
 ///     - Empty represents an empty expression which is used throughout the parser
 ///     implementation but never actually stored in the AST.
+///     - A pair which represents the headd and the tail of list.
+///     - A bunch of combinators which are used in the reduction machine for evaluating
+///     the final AST.
 #[derive(Debug, Clone)]
 pub enum AstNode {
+    /// A local where definition containing the expression body which it belongs to
+    /// and all the local definitions.
+    /// ```text
+    ///     Where
+    ///    /     \
+    ///  Body   Definitions
+    /// ```
     Where(AstNodePtr, Vec<(Identifier, (Params, AstNodePtr))>),
     /// Function application used for currying functions
     App(AstNodePtr, AstNodePtr),
-    // Variable/function identifier
+    /// Variable/function identifier
     Ident(String),
-    // Atomics
+    /// Atomics
     Constant(Type),
-    // Predefinied functions
+    /// Predefinied functions
     Builtin(Op),
-    // Empty expression
+    /// Empty expression
     Empty,
+    /// A pair represents the head and tail of a list
     Pair(AstNodePtr, AstNodePtr),
     // Combinators
+    /// S-Combinator rule: `S @ f @ g @ x ~> f @ x @ (g @ x)`
     S,
+    /// K-Combinator rule: `K @ x @ y = x`
     K,
+    /// I-Combinator rule: `I @ x ~> x`
     I,
+    /// Y-Combinator rule: `Y @ f ~> f @ (Y @ f)`
     Y,
+    /// U-Combinator rule: `U @ f @ z ~> f @ (hd @ z) @ (tl @ z)`
     U,
+    /// B-Combinator rule: `B @ f @ g @ x ~> f @ (g @ x)`
     B,
+    /// B*-Combinator rule: `B* @ c @ f @ g @ x ~> c @ (f @ (g @ x))`
     B_,
+    /// C-Combinator rule: `C @ f @ g @ x ~> f @ x @ g`
     C,
+    /// C'-Combinator rule: `C' @ c @ f @ g @ x ~> c @ (f @ x) @ g`
     C_,
+    /// S'-Combinator rule: `S' @ c @ f @ g @ x ~> c @ (f @ x) @ (g @ x)
     S_,
 }
 
@@ -147,10 +169,14 @@ impl fmt::Display for AstNode {
     }
 }
 
+/// A convenience function for easily applying one node to the other. \
+/// `astnode1, astnode2 ~> astnode1 @ astnode2`
 pub(crate) fn apply2(astnode1: AstNodePtr, astnode2: AstNodePtr) -> AstNodePtr {
     ptr!(AstNode::App(astnode1, astnode2))
 }
 
+/// A convenience function for easily applying applying three nodes to each other. \
+/// `astnode1, astnode2, astnode3 ~> (astnode1 @ astnode2) @ astnode3`
 pub(crate) fn apply3(
     astnode1: AstNodePtr,
     astnode2: AstNodePtr,

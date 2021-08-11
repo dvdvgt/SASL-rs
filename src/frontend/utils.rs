@@ -2,7 +2,7 @@
 
 use std::fmt::{Display, Formatter, Result};
 
-/// Relative position of a `Token` in the source file/source code.
+/// Position of a `Token` in the source file/source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Position {
     pub line: u32,
@@ -29,10 +29,12 @@ impl Position {
         }
     }
 
+    /// Increment the column counter by 1
     pub fn next_column(&mut self) {
         self.end_column += 1;
     }
 
+    /// Increment the line counter by 1 and reset the column count
     pub fn next_line(&mut self) {
         self.line += 1;
         self.end_column = 1;

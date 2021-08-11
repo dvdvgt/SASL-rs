@@ -1,11 +1,20 @@
+//! This module contains the SaslError enum which is used throughout the compiler for returning informative
+//! errors to the user in order to simplify debugging of the source code.
+
 use std::{error::Error, fmt, fmt::Display};
 
 use crate::frontend::utils::Position;
 
-#[derive(Debug)]
+/// A `SaslError` distinguishes between different stages of the compiler so that
+/// different instance of `SaslError` is used in regard to the occurence of the error.
+/// This helps narrowing down potential bugs in the compiler.
+#[derive(Debug, PartialEq)]
 pub enum SaslError {
+    /// An error occuring while tokenizing.
     SyntaxError { pos: Position, msg: String },
+    /// An error occuring while parsing the tokens.
     ParseError { pos: Position, msg: String },
+    /// An error occuring while evaluating, reducing or abstracting the AST.
     CompilerError { msg: String },
 }
 

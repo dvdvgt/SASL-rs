@@ -447,7 +447,7 @@ impl ReductionMachine {
             ptr!(z.borrow().clone()),
         );
         //Create (f @ (tl @ z))
-        let f_hd_and_z = AstNode::App(f, ptr!(hd_and_z));
+        let f_hd_and_z = AstNode::App(ptr!(f.borrow().clone()), ptr!(hd_and_z));
 
         set_app_child_value!(lhs(top) = f_hd_and_z);
         set_app_child_value!(rhs(top) = tl_and_z);
@@ -692,7 +692,7 @@ impl ReductionMachine {
                     Ok(())
                 }
                 _ => self.throw_compile_err(&format!(
-                    "Expected arithmetic operation. Found {} instead.",
+                    "Expected arithmetic operation or comparison. Found {} instead.",
                     &op
                 )),
             }
@@ -742,7 +742,7 @@ impl ReductionMachine {
                     set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(false)));
                     Ok(())
                 }
-                _ => self.throw_compile_err("This Operation ist not possible on Nil"),
+                _ => self.throw_compile_err(&format!("Expected list comparison. Found {} instead.", &op)),
             }
 
         //Only one Parameter ist nil
@@ -756,10 +756,10 @@ impl ReductionMachine {
                     set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(true)));
                     Ok(())
                 }
-                _ => self.throw_compile_err("This Operation ist not possible on Nil"),
+                _ => self.throw_compile_err(&format!("Expected list comparison. Found {} instead.", &op)),
             }
         } else {
-            self.throw_compile_err(&format!("Compilation error: Unkown binary operation: {}", op))
+            self.throw_compile_err(&format!("Unkown binary operation: {}", op))
         }
     }
     //eval unary oparions

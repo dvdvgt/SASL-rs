@@ -1,12 +1,24 @@
 //! The lexer struct is responsible for tokenizing the source code so that it can be used by the parser to create the AST.
+//! 
+//! The lexer is able to tokenize all SASL atomic datatypes and keywords as well as comments which are marked with '//'.
+//! All that is following after '//' on the same line is discarded and ignored so that only a line break ends a comment.
+//! Furthermore the lexer provides some usefull error messages like recognizing missing closing '"' when entering a string
+//! or a missing number of the dot when entering a floating point number e.g. '1.'.
+//! 
+//! Example:
+//! ```rust
+//! use sasl::frontend::lexer::Lexer;
+//! let mut tokens_or_err = Lexer::new("1 + 2").tokenize();
+//! ```
+//! `tokenize` either returns an error or a vector containing all tokens.
 
-use std::{collections::VecDeque, error::Error, iter::Peekable, str::Chars};
+use std::{collections::VecDeque, iter::Peekable, str::Chars};
 
 use super::{
     token::{Token, Type},
     utils::Position,
 };
-use crate::error::SaslError::SyntaxError;
+use crate::error::SaslError::{self, SyntaxError};
 use crate::T;
 
 /// The lexer struct is responsible for the tokeniziation of the source code.
@@ -26,7 +38,9 @@ pub struct Lexer<'a> {
     current_idx: usize,
 }
 
-type LexerResult<'a> = Result<Token<'a>, Box<dyn Error>>;
+/// The lexer either returns a token or an error which will be propagated to
+/// the user informing about an error.
+type LexerResult<'a> = Result<Token<'a>, SaslError>;
 
 impl<'a> Lexer<'a> {
     /// Create a new instance of `Lexer`
@@ -41,8 +55,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Tokenize source string.
-    pub fn tokenize(&mut self) -> Result<VecDeque<Token<'a>>, Box<dyn Error>> {
+    /// Tokenize the source string into a vector of tokens.
+    pub fn tokenize(&mut self) -> Result<VecDeque<Token<'a>>, SaslError> {
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
             let token = self.next_token()?;
@@ -92,6 +106,8 @@ impl<'a> Lexer<'a> {
             Some('+') => self.new_token(Type::Plus),
             Some('-') => self.new_token(Type::Minus),
             Some('*') => self.new_token(Type::Mult),
+            // A '/' is either followed by a second '/' for disclosing a comment
+            // or something else which just makes it division.
             Some('/') => match self.advance_if(&|x| x == &'/') {
                 Some(_) => {
                     self.advance_while(&|x| x != &'\n');
@@ -113,16 +129,16 @@ impl<'a> Lexer<'a> {
                 } else if c.is_alphabetic() {
                     self.keyword()
                 } else {
-                    Err(Box::new(SyntaxError {
+                    Err(SyntaxError {
                         pos: self.token_pos,
                         msg: "Invalid keyword/identifier.".to_string(),
-                    }))
+                    })
                 }
             }
-            _ => Err(Box::new(SyntaxError {
+            _ => Err(SyntaxError {
                 pos: self.token_pos,
                 msg: "Invalid input.".to_string(),
-            })),
+            }),
         }
     }
 
@@ -196,16 +212,16 @@ impl<'a> Lexer<'a> {
             self.advance();
             if let Some(num) = self.chars.peek() {
                 if !num.is_digit(10) {
-                    return Err(Box::new(SyntaxError {
+                    return Err(SyntaxError {
                         pos: self.token_pos,
                         msg: "Expected floating point number.".to_string(),
-                    }));
+                    });
                 }
             } else {
-                return Err(Box::new(SyntaxError {
+                return Err(SyntaxError {
                     pos: self.token_pos,
                     msg: "Expected floating point number.".to_string(),
-                }));
+                });
             }
             self.advance_while(&|c| c.is_digit(10))
         }
@@ -231,10 +247,10 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
         if self.is_at_end() {
-            return Err(Box::new(SyntaxError {
+            return Err(SyntaxError {
                 pos: self.token_pos,
                 msg: "missing closing \".".to_string(),
-            }));
+            });
         }
         // Advance over "
         self.advance();
@@ -265,6 +281,11 @@ impl<'a> Lexer<'a> {
 mod tests {
     use super::*;
 
+    fn lex(src: &'static str) -> Result<VecDeque<Token<'static>>, SaslError> {
+        let mut lx = Lexer::new(src);
+        lx.tokenize()
+    }
+
     #[test]
     fn test_advance() {
         let mut lx = Lexer::new("1.23");
@@ -291,5 +312,76 @@ mod tests {
         let mut lx2 = Lexer::new("123.45678");
         lx2.advance_while(&|x| x.is_digit(10));
         assert_eq!(lx2.advance(), Some('.'));
+    }
+
+    #[test]
+    fn test_string() {
+        let token = &lex("\"abc\"").unwrap()[0];
+        assert_eq!(
+            token, 
+            &Token {
+                lexeme: "\"abc\"",
+                pos: Position::new(1, 1, 5),
+                typ: Type::String("abc".to_string())
+            }
+        );
+        let token = &lex("\"abc\nd\"").unwrap()[0];
+        assert_eq!(
+            token, 
+            &Token {
+                lexeme: "\"abc\nd\"",
+                pos: Position::new(1, 1, 7),
+                typ: Type::String("abc\nd".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn test_complex_expressions() {
+        let tokens = lex("[a+b, \"abc\", true, false, []]").unwrap();
+        assert_eq!(tokens[0].typ, T!['[']);
+        assert_eq!(tokens[1].typ, Type::Identifier);
+        assert_eq!(tokens[2].typ, T![+]);
+        assert_eq!(tokens[3].typ, Type::Identifier);
+        assert_eq!(tokens[4].typ, T![,]);
+        assert_eq!(tokens[5].typ, Type::String("abc".to_string()));
+        assert_eq!(tokens[6].typ, T![,]);
+        assert_eq!(tokens[7].typ, T![true]);
+        assert_eq!(tokens[8].typ, T![,]);
+        assert_eq!(tokens[9].typ, T![false]);
+        assert_eq!(tokens[10].typ, T![,]);
+        assert_eq!(tokens[11].typ, T!['[']);
+        assert_eq!(tokens[12].typ, T![']']);
+        assert_eq!(tokens[13].typ, T![']']);
+        assert_eq!(tokens[14].typ, Type::Eof);
+        assert_eq!(tokens[14].pos, Position::new(1, 29, 29));
+
+        let tokens = lex("if a then b else c").unwrap();
+        assert_eq!(tokens[0].typ, T![if]);
+        assert_eq!(tokens[1].typ, T![ident]);
+        assert_eq!(tokens[2].typ, T![then]);
+        assert_eq!(tokens[3].typ, T![ident]);
+        assert_eq!(tokens[4].typ, T![else]);
+        assert_eq!(tokens[5].typ, T![ident]);
+    }
+
+    #[test]
+    fn test_errors() {
+        let err = lex("\"abc").unwrap_err();
+        assert_eq!(
+            err,
+            SyntaxError { 
+                pos: Position { line: 1, start_column: 1, end_column: 4 }, 
+                msg: "missing closing \".".to_string() 
+            }
+        );
+        let err = lex("1.").unwrap_err();
+        assert_eq!(
+            err,
+            SyntaxError { 
+                pos: Position { line: 1, start_column: 1, end_column: 2 }, 
+                msg: "Expected floating point number.".to_string() 
+            }
+        )
     }
 }

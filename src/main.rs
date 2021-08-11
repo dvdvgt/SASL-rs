@@ -73,14 +73,16 @@ pub fn run(src: &str, args: &ArgMatches) {
     let mut lx = Lexer::new(src);
     let tokens = lx.tokenize();
     // Only output tokens if verbose flag is set.
-    if args.is_present("verbose") {
-        println!("Tokens:");
-        match tokens {
-            Err(ref e) => {
-                eprintln!("{}", e);
-                return;
+    match tokens {
+        Err(ref e) => {
+            eprintln!("{}", e);
+            return;
+        }
+        Ok(ref tokens) => {
+            if args.is_present("verbose") {
+                println!("Tokens:");
+                tokens.iter().for_each(|token| println!("\t{}", token))
             }
-            Ok(ref tokens) => tokens.iter().for_each(|token| println!("\t{}", token)),
         }
     }
     // Parse the tokens.
@@ -102,7 +104,6 @@ pub fn run(src: &str, args: &ArgMatches) {
                 let mut viz = Visualizer::new("g", false);
                 viz.visualize_ast(ast);
                 let filename = args.value_of("visualize").unwrap();
-                println!("{}.pdf", filename);
                 viz.write_to_pdf(&format!("{}.pdf", filename));
                 viz.write_to_dot(&format!("{}.dot", filename));
             }
