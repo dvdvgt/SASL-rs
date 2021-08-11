@@ -1,10 +1,10 @@
 //! The lexer struct is responsible for tokenizing the source code so that it can be used by the parser to create the AST.
-//! 
+//!
 //! The lexer is able to tokenize all SASL atomic datatypes and keywords as well as comments which are marked with '//'.
 //! All that is following after '//' on the same line is discarded and ignored so that only a line break ends a comment.
 //! Furthermore the lexer provides some usefull error messages like recognizing missing closing '"' when entering a string
 //! or a missing number of the dot when entering a floating point number e.g. '1.'.
-//! 
+//!
 //! Example:
 //! ```rust
 //! use sasl::frontend::lexer::Lexer;
@@ -15,8 +15,8 @@
 use std::{collections::VecDeque, iter::Peekable, str::Chars};
 
 use super::{
-    token::{Token, Type},
     position::Position,
+    token::{Token, Type},
 };
 use crate::error::SaslError::{self, SyntaxError};
 use crate::T;
@@ -318,7 +318,7 @@ mod tests {
     fn test_string() {
         let token = &lex("\"abc\"").unwrap()[0];
         assert_eq!(
-            token, 
+            token,
             &Token {
                 lexeme: "\"abc\"",
                 pos: Position::new(1, 1, 5),
@@ -327,7 +327,7 @@ mod tests {
         );
         let token = &lex("\"abc\nd\"").unwrap()[0];
         assert_eq!(
-            token, 
+            token,
             &Token {
                 lexeme: "\"abc\nd\"",
                 pos: Position::new(1, 1, 7),
@@ -370,17 +370,25 @@ mod tests {
         let err = lex("\"abc").unwrap_err();
         assert_eq!(
             err,
-            SyntaxError { 
-                pos: Position { line: 1, start_column: 1, end_column: 4 }, 
-                msg: "missing closing \".".to_string() 
+            SyntaxError {
+                pos: Position {
+                    line: 1,
+                    start_column: 1,
+                    end_column: 4
+                },
+                msg: "missing closing \".".to_string()
             }
         );
         let err = lex("1.").unwrap_err();
         assert_eq!(
             err,
-            SyntaxError { 
-                pos: Position { line: 1, start_column: 1, end_column: 2 }, 
-                msg: "Expected floating point number.".to_string() 
+            SyntaxError {
+                pos: Position {
+                    line: 1,
+                    start_column: 1,
+                    end_column: 2
+                },
+                msg: "Expected floating point number.".to_string()
             }
         )
     }

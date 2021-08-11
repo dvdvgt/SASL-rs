@@ -117,8 +117,8 @@ impl<'a> Parser<'a> {
                 ast.body = expr;
                 Ok(ast)
             } else {
-                let tok = self.next().unwrap();
-                Err(self.token_parse_err(tok, "Expected '.'."))
+                ast.body = ptr!(AstNode::Empty);
+                Ok(ast)
             }
         } else {
             ast.body = self.parse_expr()?;
@@ -545,10 +545,7 @@ mod tests {
             params: None,
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(
-            astnode.deref().borrow().to_string(),
-            "((+ @ 5) @ 2)"
-        );
+        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ 5) @ 2)");
 
         let def = &Def {
             name: "b".to_string(),

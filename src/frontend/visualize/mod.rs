@@ -1,13 +1,13 @@
 //! This module contains a simple DOT parser used for creating PDFs with the visualized AST.
-//! 
+//!
 //! The parser implements the most simple DOT language features like creating directed or undirected
 //! graphs. Note that in order create PDFs from the .dot file the [dot package](https://www.graphviz.org/download/)
 //! needs to installed on your system. It is available with most GNU/Linux package manager.
-//! 
+//!
 //! Example:
 //! ```rust
 //! use sasl::frontend::{visualize::Visualizer, parser::Parser, lexer::Lexer};
-//! 
+//!
 //! let mut viz = Visualizer::new("test_graph", true);
 //! let ast = Parser::new(
 //!     Lexer::new("a + b where a = 1; b = 2").tokenize().unwrap()
@@ -89,7 +89,8 @@ impl Visualizer {
         let system_id = self.get_next_id();
         self.add_node("Prog".to_string());
         let mut defs = vec![];
-        ast.global_defs.iter()
+        ast.global_defs
+            .iter()
             .for_each(|(id, (p, body))| defs.push((id.clone(), (p.clone(), body.clone()))));
 
         self.add_definition(system_id.clone(), &defs);

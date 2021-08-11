@@ -2,10 +2,13 @@
 
 use crate::frontend::token::Type;
 use crate::{
+    check_type, get_app_child, get_const_val, get_pair_child, match_astnode, ptr,
+    set_app_child_value, T,
+};
+use crate::{
     error::SaslError,
     frontend::ast::{Ast, AstNode, AstNodePtr, Op},
 };
-use crate::{ptr, T, set_app_child_value, get_app_child, get_const_val, get_pair_child, match_astnode, check_type};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 /// Specifies where a global definition occured - as the left or right child
@@ -24,7 +27,7 @@ pub struct ReductionMachine {
     ast: Ast,
     left_ancestor_stack: Stack<AstNodePtr>,
     /// Activate optimizations or evaluate without any
-    optimize: bool
+    optimize: bool,
 }
 
 impl ReductionMachine {
@@ -33,7 +36,7 @@ impl ReductionMachine {
         Self {
             ast,
             left_ancestor_stack: stack,
-            optimize
+            optimize,
         }
     }
 
@@ -578,7 +581,10 @@ impl ReductionMachine {
                     set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(false)));
                     Ok(())
                 }
-                _ => self.throw_compile_err(&format!("Expected list comparison. Found {} instead.", &op)),
+                _ => self.throw_compile_err(&format!(
+                    "Expected list comparison. Found {} instead.",
+                    &op
+                )),
             }
 
         //Only one Parameter ist nil
@@ -592,7 +598,10 @@ impl ReductionMachine {
                     set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(true)));
                     Ok(())
                 }
-                _ => self.throw_compile_err(&format!("Expected list comparison. Found {} instead.", &op)),
+                _ => self.throw_compile_err(&format!(
+                    "Expected list comparison. Found {} instead.",
+                    &op
+                )),
             }
         } else {
             self.throw_compile_err(&format!("Unkown binary operation: {}", op))
@@ -614,7 +623,10 @@ impl ReductionMachine {
             set_app_child_value!(rhs(top) = AstNode::Constant(Type::Boolean(!rhs_val)));
             Ok(())
         } else {
-            self.throw_compile_err(&format!("Compilation error: Expected boolean expression after not. Found {} instead.", &*rhs.borrow()))
+            self.throw_compile_err(&format!(
+                "Compilation error: Expected boolean expression after not. Found {} instead.",
+                &*rhs.borrow()
+            ))
         }
     }
     //reduce if conditions
@@ -718,8 +730,8 @@ impl ReductionMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::{lexer::*, parser::*};
     use crate::backend::abstractor::compile;
+    use crate::frontend::{lexer::*, parser::*};
 
     fn evaluate(code: &str) -> String {
         let mut ast = Parser::new(Lexer::new(code).tokenize().unwrap())
@@ -733,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_simple_operations() {
-        let result = evaluate( "1 + 6 * 5 / 3");
+        let result = evaluate("1 + 6 * 5 / 3");
         assert_eq!(result, "11");
 
         let result = evaluate("[1,2,3] ~= nil");
@@ -758,20 +770,11 @@ mod tests {
         assert_eq!(evaluate(&program), "5050");
 
         let program = std::fs::read_to_string("reference-bin/sieve.sasl").unwrap();
-        assert_eq!(
-            evaluate(&program),
-            "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]"
-        );
+        assert_eq!(evaluate(&program), "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]");
 
         let program = "f where f = g + 1; g = 1";
-        assert_eq!(
-            evaluate(&program),
-            "2"
-        );
+        assert_eq!(evaluate(&program), "2");
         let program = "f where g = 1; f = g + 1";
-        assert_eq!(
-            evaluate(&program),
-            "2"
-        );
+        assert_eq!(evaluate(&program), "2");
     }
 }

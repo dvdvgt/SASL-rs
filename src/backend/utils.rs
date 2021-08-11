@@ -1,9 +1,9 @@
-//! This module contains some useful macros for manipulating and accessing values with 
+//! This module contains some useful macros for manipulating and accessing values with
 //! Rc<RefCell<AstNode>> which usually requires quite a lot of verbose, boilerplate code
 //! which can be avoided with these convenience macros.
 
 /// Clone the reference of either the left or right child of an App node.
-/// 
+///
 /// If the node is not an App node the macro panics.
 #[macro_export]
 macro_rules! get_app_child {
@@ -22,7 +22,7 @@ macro_rules! get_app_child {
 }
 
 /// Clone either the left or right reference of a Pair node.
-/// 
+///
 /// If the node is not a Pair node the macro panics.
 #[macro_export]
 macro_rules! get_pair_child {
@@ -40,9 +40,9 @@ macro_rules! get_pair_child {
     };
 }
 
-/// Set the left or right child of an App node. 
-/// 
-/// Be wary and make sure the borrowing rules are upheld during runtime otherwise the 
+/// Set the left or right child of an App node.
+///
+/// Be wary and make sure the borrowing rules are upheld during runtime otherwise the
 /// program panics.
 #[macro_export]
 macro_rules! set_app_child_value {

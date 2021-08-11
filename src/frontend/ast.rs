@@ -51,7 +51,7 @@ pub type Identifier = String;
 ///     the global definitions by a dot ('.') in the source code.
 #[derive(Debug, Clone)]
 pub struct Ast {
-    /// Contains all global definitions which are accessible by 
+    /// Contains all global definitions which are accessible by
     /// the name (identifier) of the definition.
     pub global_defs: HashMap<Identifier, (Params, AstNodePtr)>,
     pub body: AstNodePtr,
@@ -67,6 +67,14 @@ impl Ast {
 
     pub fn lookup(&self, def: &str) -> Option<&(Params, AstNodePtr)> {
         self.global_defs.get(def)
+    }
+
+    pub fn insert_defs(&mut self, defs: &HashMap<Identifier, (Params, AstNodePtr)>) {
+        for (key, value) in defs {
+            if !self.global_defs.contains_key(key) {
+                self.global_defs.insert(key.clone(), value.clone());
+            }
+        }
     }
 }
 
@@ -146,14 +154,12 @@ impl fmt::Display for AstNode {
                 //format!("{} where {}", expr, nested_where),
                 AstNode::Where(expr, defs) => format!("{} where {:?}", expr.borrow(), defs),
                 //AstNode::Where(None, _, None) => "where".to_string(),
-                AstNode::App(ast1, ast2) =>
-                    format!("({} @ {})", ast1.borrow(), ast2.borrow()),
+                AstNode::App(ast1, ast2) => format!("({} @ {})", ast1.borrow(), ast2.borrow()),
                 AstNode::Ident(s) => format!("Id:{}", s),
                 AstNode::Constant(t) => t.to_string(),
-                AstNode::Pair(a, b) =>
-                    format!("({} @_pair {})", a.borrow(), b.borrow()),
+                AstNode::Pair(a, b) => format!("({} @_pair {})", a.borrow(), b.borrow()),
                 AstNode::Builtin(op) => op.to_string(),
-                AstNode::Empty => "empty".to_string(),
+                AstNode::Empty => "".to_string(),
                 AstNode::S => "S".to_string(),
                 AstNode::K => "K".to_string(),
                 AstNode::I => "I".to_string(),

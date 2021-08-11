@@ -1,10 +1,13 @@
-//! This file contains the implementation of the compiler called `Abstractor'. It replaces all identifiers in
-//! a expression with `S,K,I` combinators based on the rules defined by the SASL language.
+//! This module contains the implementation of the compiler called `Abstractor'. 
+//! 
+//! The abstractor replaces all occurences of parameter identifiers of local and
+//! global definitions by applying the rules specified by the SASL language. This is
+//! where the S, K, I, Y and U combinators are introduced into the AST. 
 
 use crate::ptr;
 use crate::{
     error::SaslError,
-    frontend::ast::{self, AstNode, Ast, AstNodePtr, Identifier, Op},
+    frontend::ast::{self, Ast, AstNode, AstNodePtr, Identifier, Op},
     T,
 };
 use std::collections::VecDeque;
@@ -45,7 +48,8 @@ impl<'a> Abstractor<'a> {
         }
     }
 
-    /// Check if multiple where definitions contain recursion.
+    /// Check if multiple where definitions contain recursion. This includes both self recursive
+    /// definitions and mutually recursive definitions.
     fn check_for_mutual_recursion(&self, defs: &Vec<(Identifier, AstNodePtr)>) -> bool {
         let def_ids = defs.iter().map(|x| x.0.clone()).collect();
         let mut found_recursion = false;
@@ -55,7 +59,7 @@ impl<'a> Abstractor<'a> {
         found_recursion
     }
 
-    /// Abstracts away all identifiers in a expressions.
+    /// Abstracts all identifiers (excluding global identifiers i.e. global definitions) in an expressions.
     pub fn abstract_ids(&mut self, body: &mut AstNodePtr) -> Result<(), SaslError> {
         // If it's a function definition it has to have parameters which need to abstracted.
         // Otherwise it's just a const which may or may not contain a where.
@@ -77,6 +81,8 @@ impl<'a> Abstractor<'a> {
         Ok(())
     }
 
+    /// Abstract a single identifier from a node. Corresponds to `[x] f` where x is an identifier
+    /// and f is a single `AstNodePtr`.
     fn abstract_id(&mut self, body: AstNodePtr, id: &Identifier) -> AbstractorResult {
         match *body.borrow_mut() {
             AstNode::Constant(_)
@@ -101,11 +107,12 @@ impl<'a> Abstractor<'a> {
                 self.abstract_id(Rc::clone(a), id)?,
             )),
             AstNode::Where(ref mut lhs, ref mut defs) => {
+                // Check whether the local where definitions only contains one definition
                 if defs.len() == 1 {
                     let (def_name, (params, body)) = defs.iter_mut().next().unwrap();
                     self.abstract_single_where(def_name, params, body)?;
-                    let free_def_name_body = self.abstract_id(Rc::clone(&lhs), def_name)?;
-                    self.abstract_id(ast::apply2(free_def_name_body, Rc::clone(body)), id)
+                    let freed_def_name_body = self.abstract_id(Rc::clone(&lhs), def_name)?;
+                    self.abstract_id(ast::apply2(freed_def_name_body, Rc::clone(body)), id)
                 } else {
                     let freed_where = self.abstract_multiple_where(lhs, defs)?;
                     self.abstract_id(freed_where, id)
@@ -117,6 +124,7 @@ impl<'a> Abstractor<'a> {
         }
     }
 
+    /// Abstract a local where definition which only contains exactly one definition.
     fn abstract_single_where(
         &mut self,
         name: &Identifier,
@@ -135,6 +143,8 @@ impl<'a> Abstractor<'a> {
         Ok(())
     }
 
+    /// Abstract a local where definition which contains more than one definition as this requires
+    /// the introduction of the U-combinator and therefore has to be handled seperately.
     fn abstract_multiple_where(
         &mut self,
         lhs: &mut AstNodePtr,
@@ -193,7 +203,7 @@ impl<'a> Abstractor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{frontend::{ast::Ast, lexer::Lexer, parser::Parser, visualize::Visualizer}};
+    use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser, visualize::Visualizer};
 
     fn parse_to_ast(code: &str) -> Ast {
         Parser::new(Lexer::new(code).tokenize().unwrap())
@@ -238,7 +248,6 @@ mod tests {
         vis.visualize_ast(&ast);
         println!("After compilation: {:?}", &ast);
         vis.write_to_pdf("test.pdf");
-        //println!("{}", ast.body.borrow());
     }
 
     #[test]
@@ -256,40 +265,21 @@ mod tests {
         println!("{:?}", &ast.global_defs.keys());
 
         assert_eq!(
-            ast.global_defs
-                .get("incr")
-                .unwrap()
-                .1
-                .borrow()
-                .to_string(),
+            ast.global_defs.get("incr").unwrap().1.borrow().to_string(),
             "((S @ ((S @ (K @ +)) @ (K @ 1))) @ I)"
         );
         assert_eq!(
-            ast.global_defs
-                .get("null")
-                .unwrap()
-                .1
-                .borrow()
-                .to_string(),
+            ast.global_defs.get("null").unwrap().1.borrow().to_string(),
             "((S @ ((S @ (K @ =)) @ I)) @ (K @ nil))"
         );
         assert_eq!(
-            ast.global_defs
-                .get("const")
-                .unwrap()
-                .1
-                .borrow()
-                .to_string(),
+            ast.global_defs.get("const").unwrap().1.borrow().to_string(),
             "((* @ 5) @ 3)"
         );
         assert_eq!(
             ast.global_defs.get("plus").unwrap().1.borrow().to_string(),
             "((S @ ((S @ (K @ S)) @ ((S @ ((S @ (K @ S)) @ ((S @ (K @ K)) @ (K @ +)))) @ ((S @ (K @ K)) @ I)))) @ (K @ I))"
         );
-
-        let mut viz = Visualizer::new("g", false);
-        viz.visualize_ast(&ast);
-        viz.write_to_pdf("test.pdf");
         assert_eq!(
             ast.global_defs
                 .get("rec")
