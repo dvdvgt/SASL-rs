@@ -203,7 +203,7 @@ impl<'a> Abstractor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser, visualize::Visualizer};
+    use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser};
 
     fn parse_to_ast(code: &str) -> Ast {
         Parser::new(Lexer::new(code, None).tokenize().unwrap())
@@ -223,12 +223,6 @@ mod tests {
         false
     }
 
-    fn compile_(code: &str) -> Ast {
-        let mut ast = parse_to_ast(code);
-        compile(&mut ast).unwrap();
-        ast
-    }
-
     #[test]
     fn test_check_recursion() {
         let mut ast = parse_to_ast("x where f x = g x; g y = f y");
@@ -239,15 +233,6 @@ mod tests {
         assert!(!check_recursion(ast.body));
         ast = parse_to_ast("1 where f x = 5 * x; g x = x; h x = g x");
         assert!(check_recursion(ast.body));
-    }
-
-    #[test]
-    fn test_multiple_where() {
-        let mut vis = Visualizer::new("g", false);
-        let ast = compile_("f where f = g; g = 1");
-        vis.visualize_ast(&ast);
-        println!("After compilation: {:?}", &ast);
-        vis.write_to_pdf("test.pdf");
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! needs to installed on your system. It is available with most GNU/Linux package manager.
 //!
 //! Example:
-//! ```rust
+//! ```rust, no_run
 //! use sasl::frontend::{visualize::Visualizer, parser::Parser, lexer::Lexer};
 //!
 //! let mut viz = Visualizer::new("test_graph", true);

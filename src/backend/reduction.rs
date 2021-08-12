@@ -1,4 +1,7 @@
 //! This module contains the implementation of a virtual machine used for evaluating a SASL program.
+//! 
+//! The reduction machine also has all the optimizations built in so evaluating and optimizing are not
+//! two seperate stages but one and the same.
 
 use crate::frontend::token::Type;
 use crate::{
@@ -765,19 +768,37 @@ mod tests {
 
         let result = evaluate("1 / 3 > 0.33");
         assert_eq!(result, "true");
+
+        assert_eq!(evaluate("hd [1,2,3]"), "1");
+        assert_eq!(evaluate("tl [1,2,3]"), "[2, 3]");
     }
 
     #[test]
     fn test_complex_programs() {
-        let program = std::fs::read_to_string("reference-bin/example.sasl").unwrap();
-        assert_eq!(evaluate(&program), "5050");
+        // mutual recursion
+        let prog = "f where f = g + 1; g = 1";
+        assert_eq!(evaluate(prog), "2");
+        let prog = "f where g = 1; f = g + 1";
+        assert_eq!(evaluate(prog), "2");
 
-        let program = std::fs::read_to_string("reference-bin/sieve.sasl").unwrap();
-        assert_eq!(evaluate(&program), "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]");
+        // recursive global definition
+        let prog = "def factorial n = if n = 0 then 1 else n * factorial (n-1) . factorial 5";
+        assert_eq!(evaluate(prog), "120");
 
-        let program = "f where f = g + 1; g = 1";
-        assert_eq!(evaluate(&program), "2");
-        let program = "f where g = 1; f = g + 1";
-        assert_eq!(evaluate(&program), "2");
+        // Lazy evaluation with infinite lists
+        let prog = "def naturalNums = go 1 where go n = n : go (n+1)\
+        def take xs n = if (n = 0) or (tail = nil) then nil else head : take tail (n - 1)\
+            where tail = tl xs; head = hd xs
+        .\
+        take naturalNums 5";
+        assert_eq!(evaluate(prog), "[1, 2, 3, 4, 5]");
+
+        // Function as first class citizien
+        let prog = "def flip f x y = f y x def div x y = x / y . [flip div 2 10, div 10 2]";
+        assert_eq!(evaluate(prog), "[5, 5]");
+
+        // Currying of functions
+        let prog = "def plus x y = x + y def incr = plus 1 . incr 1";
+        assert_eq!(evaluate(prog), "2");
     }
 }

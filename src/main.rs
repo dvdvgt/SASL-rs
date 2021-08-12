@@ -172,8 +172,8 @@ impl<'a> Runner<'a> {
         match reductor.reduce() {
             Ok(_) => match reductor.print_result() {
                 Err(e) => eprintln!("\u{1b}[31m{}\u{1b}[0m", e),
-                _ => {
-                    println!("{}", reductor.print_result().unwrap());
+                Ok(s) => {
+                    println!("{}", s);
                     println!("\ntook \u{1b}[32;40m{:.2?}\u{1b}[0m", start.elapsed());
                     self.prompt_defs = ast.global_defs.clone();
                 }

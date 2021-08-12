@@ -12,7 +12,8 @@ SASL is a purely functional programming language developed by David Turner in 19
 - Purely functional programming paradigm
 
 The compiler is divided into two sections: the frontend and the backend. The frontend contains the lexer, parser and the implementation of the abstract syntax tree which is used throughout the project. The backend contains the compiler and a virtual machine for evaluation. \
-Furthermore a simple parser for the [Graphviz DOT DSL](https://graphviz.org/) is included which can be used for debugging and visualizing the abstract syntax tree.
+Furthermore a simple parser for the [Graphviz DOT DSL](https://graphviz.org/) is included which can be used for debugging and visualizing the abstract syntax tree. \
+The compiler was implemented following the languages specifications listed [here](https://db.inf.uni-tuebingen.de/staticfiles/teaching/ss16/sasl2016.pdf).
 
 # Installation
 1. If you already have Rust installed you can skip this part. Otherwise you may want to look at [how to install Rust](https://www.rust-lang.org/learn/get-started).
@@ -30,16 +31,17 @@ As previously mentioned this project contains a small parser for the DOT languag
 # Usage
 ```
 $ sasl --help
-    SASL-rs 0.0.1
+    SASL-rs 1.0.0
     David Voigt <david.voigt@student.uni-tuebingen.de>
     Lars Vogtmann <lars.vogtmann@studen.uni-tuebingen.de
-    Compiler for the SASL functional programming language written in Rust.
+    A compiler for the SASL functional programming language written in Rust.
 
     USAGE:
         sasl [FLAGS] [OPTIONS]
 
     FLAGS:
         -h, --help       Prints help information
+        -o               Activate optimizations.
         -v               Output tokens as well as the AST. Useful for debugging.
         -V, --version    Prints version information
 
@@ -116,6 +118,16 @@ The compiler features a simple REPL environment which can be started by just run
     .
     take 50 sieve
     ```
+5. It's possible to import other SASL files by just specifiying the relative path to the file
+to import.
+
+    ```
+    use prelude
+
+    take 2 [1, 2, 3]
+    ```
+    
+    There has to be `prelude.sasl` file within the same directory the file importing is in. It is also possible to import SASL files from subdirectories by specifiying the relative path including subdirectories. Imports from root directories are not (yet) supported.
 
 # Benchmarks
 The following benchmarks were conducted using [Hyperfine](https://github.com/sharkdp/hyperfine):

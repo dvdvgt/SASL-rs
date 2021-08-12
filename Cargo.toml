@@ -1,6 +1,6 @@
 [package]
 name = "sasl"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Lars Vogtmann", "David Voigt <david.voigt1998@gmail.com>"]
 edition = "2018"
 
@@ -8,12 +8,4 @@ edition = "2018"
 
 [dependencies]
 phf = { version = "0.8.0", features = ["macros"] }
-dot = "0.1.4"
 clap = "3.0.0-beta.2"
-
-[dev-dependencies]
-#criterion = "0.3.4"
-
-#[[bench]]
-#name = "bench_lexer"
-#harness = false

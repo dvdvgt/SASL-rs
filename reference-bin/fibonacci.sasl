@@ -13,4 +13,4 @@ def last xs =
     if (tl xs) = nil then hd xs
     else last (tl xs)
 .
-take 20 fibs
+take 50 fibs

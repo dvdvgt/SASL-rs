@@ -1,3 +1,7 @@
+use test/test2/prelude
+use ackermann
+use sieve
+
 def quicksort xs = 
     if xs = nil then []
     else concat (concat lhs [pivot]) rhs
@@ -22,4 +26,4 @@ def concat xs ys =
         (if ys = nil then xs
         else (hd xs) : concat (tl xs) (ys))
 .
-quicksort [3,1,4,1,5,9,7]
+[quicksort [3,1,4,1,5,9,7], length [1,2,3], ackermann 3 2, take 5 sieve]
