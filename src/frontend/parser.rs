@@ -2,15 +2,18 @@
 
 use std::cell::RefCell;
 use std::collections::{hash_map::HashMap, VecDeque};
+use std::path::Path;
 use std::rc::Rc;
+use std::{env, path};
 
 use super::{
     ast::{Ast, AstNode, AstNodePtr, Def, Identifier, Op, Params},
     token::{Token, Type},
 };
+use crate::frontend::lexer::Lexer;
 use crate::{
     error::SaslError::{self, ParseError},
-    ptr, T,
+    load_source_file, ptr, T,
 };
 
 /// The `Parser` struct is repsonsible for parsing a vector tokens to the intermediate AST
@@ -101,6 +104,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_import_file(
+        &mut self,
+        abs_path: &Path,
+        relative_path: &Path,
+        ast: &mut Ast,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        env::set_current_dir(abs_path)?;
+        //println!("{:?}, {:?}", relative_path, env::current_dir());
+        let import_src = load_source_file(relative_path)?;
+        let full_path = env::current_dir()?.join(relative_path);
+        println!("\u{1b}[93mImported {:?}\u{1b}[0m", &full_path);
+        let tokens =
+            Lexer::new(&import_src, Some(full_path.as_os_str().to_str().unwrap())).tokenize()?;
+        let defs = Parser::new(tokens).parse()?.global_defs;
+        ast.insert_defs(&defs);
+        Ok(())
+    }
+
     //--------
     // PARSING
     //--------
@@ -109,7 +130,28 @@ impl<'a> Parser<'a> {
     /// Corresponds to the <system> non-terminal in the grammar rules.
     pub fn parse(&mut self) -> Result<Ast, SaslError> {
         let mut ast = Ast::new();
-        if self.expect_type(T![def]) {
+        let abs_path = Path::new(self.consume(&T![path]).lexeme);
+        //println!("{:?}", abs_path);
+        // Check for imports and insert their definitions into the current defs
+        while let T![use] = self.peek() {
+            self.next();
+            let path_str = self.consume(&T![path]).lexeme;
+            let relative_imp_path = path::Path::new(path_str);
+            let ret = self.parse_import_file(abs_path, relative_imp_path, &mut ast);
+            match ret {
+                Err(e) => eprintln!(
+                    "\u{1b}[31mImport {}: {}\u{1b}[0m",
+                    relative_imp_path.to_string_lossy(),
+                    e
+                ),
+                _ => (),
+            }
+        }
+        // Is it only an import? Valid for REPL use
+        if self.expect_type(T![eof]) {
+            Ok(ast)
+        // <funcdefs> . <expr> | <funcdefs> ?
+        } else if self.expect_type(T![def]) {
             self.parse_funcdefs(&mut ast.global_defs)?;
             if self.expect_type(T![.]) {
                 self.consume(&T![.]);
@@ -120,6 +162,7 @@ impl<'a> Parser<'a> {
                 ast.body = ptr!(AstNode::Empty);
                 Ok(ast)
             }
+        // <expr>
         } else {
             ast.body = self.parse_expr()?;
             Ok(ast)
@@ -492,21 +535,23 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use super::*;
     use crate::frontend::lexer::Lexer;
 
     fn parse_expr(input: &str) -> AstNodePtr {
-        let mut lx = Lexer::new(input);
-        let tokens = lx.tokenize().unwrap().clone();
+        let mut lx = Lexer::new(input, None);
+        let mut tokens = lx.tokenize().unwrap().clone();
+        // Remove module path token
+        tokens.pop_front();
         let mut parser = Parser::new(tokens);
         parser.parse_expr().unwrap()
     }
 
     fn parse_def(input: &str, defs: &mut Defs) {
-        let mut lx = Lexer::new(input);
-        let tokens = lx.tokenize().unwrap().clone();
+        let mut lx = Lexer::new(input, None);
+        let mut tokens = lx.tokenize().unwrap().clone();
+        // Remove module path token
+        tokens.pop_front();
         let mut parser = Parser::new(tokens);
         parser.parse_funcdefs(defs).unwrap()
     }
@@ -515,17 +560,17 @@ mod tests {
     fn test_parse_basic_epxr() {
         let expr = parse_expr("[1,2,\"ab\", true, 5.6, id]");
         assert_eq!(
-            expr.deref().borrow().to_string(),
+            expr.borrow().to_string(),
             "((: @ 1) @ ((: @ 2) @ ((: @ \"ab\") @ ((: @ true) @ ((: @ 5.6) @ ((: @ Id:id) @ nil))))))"
         );
         let expr = parse_expr("1.2 + 2 * 3 - 4 / 5");
         assert_eq!(
-            expr.deref().borrow().to_string(),
+            expr.borrow().to_string(),
             "((- @ ((+ @ 1.2) @ ((* @ 2) @ 3))) @ ((/ @ 4) @ 5))"
         );
         let expr = parse_expr("if [1,true,\"a\"] = nil then 1.5 else -2.5");
         assert_eq!(
-            expr.deref().borrow().to_string(),
+            expr.borrow().to_string(),
             "(((cond @ ((= @ ((: @ 1) @ ((: @ true) @ ((: @ \"a\") @ nil)))) @ nil)) @ 1.5) @ (- @ 2.5))"
         );
     }
@@ -545,17 +590,14 @@ mod tests {
             params: None,
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(astnode.deref().borrow().to_string(), "((+ @ 5) @ 2)");
+        assert_eq!(astnode.borrow().to_string(), "((+ @ 5) @ 2)");
 
         let def = &Def {
             name: "b".to_string(),
             params: Some(vec!["x".to_string()]),
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
-        assert_eq!(
-            astnode.deref().borrow().to_string(),
-            "((* @ (- @ 2.3)) @ Id:x)"
-        );
+        assert_eq!(astnode.borrow().to_string(), "((* @ (- @ 2.3)) @ Id:x)");
 
         let def = &Def {
             name: "plus".to_string(),
@@ -563,7 +605,7 @@ mod tests {
         };
         let (_, astnode) = defs.get(&def.name).unwrap();
         assert_eq!(
-            astnode.deref().borrow().to_string(),
+            astnode.borrow().to_string(),
             "((+ @ ((+ @ Id:x) @ Id:y)) @ Id:z)"
         );
     }

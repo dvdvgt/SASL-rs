@@ -1,14 +1,15 @@
-use io::Write;
 use std::{
     collections::HashMap,
+    env,
     error::Error,
-    fs,
-    io::{self, Read},
+    io::{self, Write},
+    path,
     time::Instant,
 };
 
 use clap::{App, Arg, ArgMatches};
 use sasl::frontend::{lexer::Lexer, parser::Parser, visualize::Visualizer};
+use sasl::load_source_file;
 use sasl::{
     backend::{abstractor::compile, reduction::ReductionMachine},
     frontend::ast::{AstNodePtr, Identifier, Params},
@@ -50,6 +51,7 @@ fn main() {
 
 /// Indicate whether the compiler shall be run in REPL/prompt mode or
 /// to compile and evaluate a SASL source file.
+#[derive(Clone, Copy)]
 enum RunMode {
     Prompt,
     File,
@@ -63,18 +65,27 @@ struct Runner<'a> {
     /// Save the defs from the previous REPL queries in order to still
     /// have access to them later on.
     prompt_defs: HashMap<Identifier, (Params, AstNodePtr)>,
+    abs_cwd: path::PathBuf,
 }
 
 impl<'a> Runner<'a> {
     pub fn run_with_mode(mode: RunMode, args: &'a ArgMatches) -> Result<(), Box<dyn Error>> {
+        let path = path::Path::new(args.value_of("compile").unwrap_or(""));
+        // Set current working directory depending on a file to compile was given
+        // and if that file is in the same directory as the compiler was started in.
+        let abs_path = match path.parent() {
+            Some(p) => env::current_dir()?.join(p),
+            None => env::current_dir()?,
+        };
         let mut runner = Self {
             mode,
             args,
             prompt_defs: HashMap::new(),
+            abs_cwd: abs_path,
         };
         match runner.mode {
             RunMode::File => {
-                let src = runner.load_source_file()?;
+                let src = load_source_file(path::Path::new(args.value_of("compile").unwrap()))?;
                 runner.run(&src);
             }
             RunMode::Prompt => runner.run_prompt()?,
@@ -82,21 +93,14 @@ impl<'a> Runner<'a> {
         Ok(())
     }
 
-    /// Helper function for getting the content of a file.
-    fn load_source_file(&self) -> Result<String, io::Error> {
-        let path = self.args.value_of("compile").unwrap();
-        let mut file = fs::File::open(path)?;
-        let mut src = String::new();
-        file.read_to_string(&mut src)?;
-        Ok(src)
-    }
-
     /// Starts a REPL like prompt used for entering single expressions. Useful for interactive debugging.
     fn run_prompt(&mut self) -> Result<(), io::Error> {
         let mut inpt = String::new();
-        println!("SASL-rs 1.0.0\
+        println!(
+            "SASL-rs 1.0.0\
         \nA compiler for the SASL functional programming language written in Rust.\
-        \nPress ctrl+d or ctrl+c to exit.");
+        \nPress ctrl+d or ctrl+c to exit.\n"
+        );
         loop {
             print!("\u{1b}[0;38;5;171mλ > \u{1b}[0m");
             io::stdout().flush()?;
@@ -113,12 +117,15 @@ impl<'a> Runner<'a> {
     }
 
     /// Evaluates/Executes a SASL program represented as string.
-    pub fn run(&mut self, src: &str) {
+    fn run(&mut self, src: &str) {
         // Time the execution duration
         let start = Instant::now();
         // Tokenize the input.
-        let mut lx = Lexer::new(src);
-        let tokens = lx.tokenize();
+        let tokens = Lexer::new(
+            src,
+            Some(self.abs_cwd.as_path().as_os_str().to_str().unwrap()),
+        )
+        .tokenize();
         // Only output tokens if verbose flag is set.
         match tokens {
             Err(ref e) => {
@@ -163,12 +170,15 @@ impl<'a> Runner<'a> {
         // Eval
         let mut reductor = ReductionMachine::new(ast.clone(), self.args.is_present("optimize"));
         match reductor.reduce() {
-            Ok(_) => {
-                println!("{}", reductor.print_result().unwrap());
-                println!("\ntook \u{1b}[32;40m{:.2?}\u{1b}[0m", start.elapsed());
-                self.prompt_defs = ast.global_defs.clone();
-            }
-            Err(e) => eprintln!("{}", e),
+            Ok(_) => match reductor.print_result() {
+                Err(e) => eprintln!("\u{1b}[31m{}\u{1b}[0m", e),
+                _ => {
+                    println!("{}", reductor.print_result().unwrap());
+                    println!("\ntook \u{1b}[32;40m{:.2?}\u{1b}[0m", start.elapsed());
+                    self.prompt_defs = ast.global_defs.clone();
+                }
+            },
+            Err(e) => eprintln!("\u{1b}[31m{}\u{1b}[0m", e),
         }
     }
 }

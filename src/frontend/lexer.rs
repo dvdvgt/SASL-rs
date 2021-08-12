@@ -4,11 +4,13 @@
 //! All that is following after '//' on the same line is discarded and ignored so that only a line break ends a comment.
 //! Furthermore the lexer provides some usefull error messages like recognizing missing closing '"' when entering a string
 //! or a missing number of the dot when entering a floating point number e.g. '1.'.
+//! Note that each SASL program's token stream has path token prepended that contains the directory the SASL module is in.
+//! This is used for handling import with relative file paths.
 //!
 //! Example:
 //! ```rust
 //! use sasl::frontend::lexer::Lexer;
-//! let mut tokens_or_err = Lexer::new("1 + 2").tokenize();
+//! let mut tokens_or_err = Lexer::new("1 + 2", None).tokenize();
 //! ```
 //! `tokenize` either returns an error or a vector containing all tokens.
 
@@ -44,15 +46,21 @@ type LexerResult<'a> = Result<Token<'a>, SaslError>;
 
 impl<'a> Lexer<'a> {
     /// Create a new instance of `Lexer`
-    pub fn new(source: &'a str) -> Self {
-        Self {
+    pub fn new(source: &'a str, source_path: Option<&'a str>) -> Self {
+        let mut lx = Self {
             source,
             chars: source.chars().peekable(),
             tokens: VecDeque::new(),
             token_pos: Position::new(1, 1, 0),
             start_idx: 0,
             current_idx: 0,
-        }
+        };
+        lx.tokens.push_back(Token {
+            lexeme: source_path.unwrap_or(""),
+            pos: Position::new(0, 0, 0),
+            typ: T![path],
+        });
+        lx
     }
 
     /// Tokenize the source string into a vector of tokens.
@@ -124,7 +132,10 @@ impl<'a> Lexer<'a> {
             Some('\"') => self.string(),
             // Literals, keywords
             Some(c) => {
-                if c.is_digit(10) {
+                if self.tokens.back().is_some() && self.tokens.back().unwrap().typ == T![use] {
+                    self.advance_while(&|x| x.is_alphanumeric() || x.is_ascii_punctuation());
+                    self.new_token(T![path])
+                } else if c.is_digit(10) {
                     self.number()
                 } else if c.is_alphabetic() {
                     self.keyword()
@@ -282,13 +293,13 @@ mod tests {
     use super::*;
 
     fn lex(src: &'static str) -> Result<VecDeque<Token<'static>>, SaslError> {
-        let mut lx = Lexer::new(src);
+        let mut lx = Lexer::new(src, None);
         lx.tokenize()
     }
 
     #[test]
     fn test_advance() {
-        let mut lx = Lexer::new("1.23");
+        let mut lx = Lexer::new("1.23", None);
         assert_eq!(lx.advance(), Some('1'));
         assert_eq!(lx.token_pos.line, 1);
         assert_eq!(lx.token_pos.start_column, 1);
@@ -298,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_advance_if() {
-        let mut lx = Lexer::new("1 + 2 * 5");
+        let mut lx = Lexer::new("1 + 2 * 5", None);
         assert_eq!(lx.advance_if(&|x| x.is_digit(10)), Some('1'));
         lx.advance();
         assert_eq!(lx.advance_if(&|x| x.is_alphanumeric()), None);
@@ -306,17 +317,17 @@ mod tests {
 
     #[test]
     fn test_advance_while() {
-        let mut lx = Lexer::new("ej0d2e9j0ej");
+        let mut lx = Lexer::new("ej0d2e9j0ej", None);
         lx.advance_while(&|x| x.is_alphanumeric());
         assert_eq!(lx.is_at_end(), true);
-        let mut lx2 = Lexer::new("123.45678");
+        let mut lx2 = Lexer::new("123.45678", None);
         lx2.advance_while(&|x| x.is_digit(10));
         assert_eq!(lx2.advance(), Some('.'));
     }
 
     #[test]
     fn test_string() {
-        let token = &lex("\"abc\"").unwrap()[0];
+        let token = &lex("\"abc\"").unwrap()[1];
         assert_eq!(
             token,
             &Token {
@@ -325,7 +336,7 @@ mod tests {
                 typ: Type::String("abc".to_string())
             }
         );
-        let token = &lex("\"abc\nd\"").unwrap()[0];
+        let token = &lex("\"abc\nd\"").unwrap()[1];
         assert_eq!(
             token,
             &Token {
@@ -339,30 +350,32 @@ mod tests {
     #[test]
     fn test_complex_expressions() {
         let tokens = lex("[a+b, \"abc\", true, false, []]").unwrap();
-        assert_eq!(tokens[0].typ, T!['[']);
-        assert_eq!(tokens[1].typ, Type::Identifier);
-        assert_eq!(tokens[2].typ, T![+]);
-        assert_eq!(tokens[3].typ, Type::Identifier);
-        assert_eq!(tokens[4].typ, T![,]);
-        assert_eq!(tokens[5].typ, Type::String("abc".to_string()));
-        assert_eq!(tokens[6].typ, T![,]);
-        assert_eq!(tokens[7].typ, T![true]);
-        assert_eq!(tokens[8].typ, T![,]);
-        assert_eq!(tokens[9].typ, T![false]);
-        assert_eq!(tokens[10].typ, T![,]);
-        assert_eq!(tokens[11].typ, T!['[']);
-        assert_eq!(tokens[12].typ, T![']']);
+        assert_eq!(tokens[0].typ, T![path]);
+        assert_eq!(tokens[1].typ, T!['[']);
+        assert_eq!(tokens[2].typ, Type::Identifier);
+        assert_eq!(tokens[3].typ, T![+]);
+        assert_eq!(tokens[4].typ, Type::Identifier);
+        assert_eq!(tokens[5].typ, T![,]);
+        assert_eq!(tokens[6].typ, Type::String("abc".to_string()));
+        assert_eq!(tokens[7].typ, T![,]);
+        assert_eq!(tokens[8].typ, T![true]);
+        assert_eq!(tokens[9].typ, T![,]);
+        assert_eq!(tokens[10].typ, T![false]);
+        assert_eq!(tokens[11].typ, T![,]);
+        assert_eq!(tokens[12].typ, T!['[']);
         assert_eq!(tokens[13].typ, T![']']);
-        assert_eq!(tokens[14].typ, Type::Eof);
-        assert_eq!(tokens[14].pos, Position::new(1, 29, 29));
+        assert_eq!(tokens[14].typ, T![']']);
+        assert_eq!(tokens[15].typ, Type::Eof);
+        assert_eq!(tokens[15].pos, Position::new(1, 29, 29));
 
         let tokens = lex("if a then b else c").unwrap();
-        assert_eq!(tokens[0].typ, T![if]);
-        assert_eq!(tokens[1].typ, T![ident]);
-        assert_eq!(tokens[2].typ, T![then]);
-        assert_eq!(tokens[3].typ, T![ident]);
-        assert_eq!(tokens[4].typ, T![else]);
-        assert_eq!(tokens[5].typ, T![ident]);
+        assert_eq!(tokens[0].typ, T![path]);
+        assert_eq!(tokens[1].typ, T![if]);
+        assert_eq!(tokens[2].typ, T![ident]);
+        assert_eq!(tokens[3].typ, T![then]);
+        assert_eq!(tokens[4].typ, T![ident]);
+        assert_eq!(tokens[5].typ, T![else]);
+        assert_eq!(tokens[6].typ, T![ident]);
     }
 
     #[test]

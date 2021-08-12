@@ -710,11 +710,14 @@ impl ReductionMachine {
     fn insert_global_def(&mut self, s: String, def_pos: DefPosition) -> Result<(), SaslError> {
         let top = self.left_ancestor_stack.last().unwrap().clone();
         //look into Hashmap
+        if !self.ast.global_defs.contains_key(&s) {
+            return self.throw_compile_err(&format!("Could not find definition {}.", &s));
+        }
         let x = self
             .ast
             .global_defs
             .get(&s)
-            .unwrap_or_else(|| panic!("Could not find global definition for {}.", &s))
+            .unwrap()
             .1
             .deref()
             .borrow()
@@ -734,7 +737,7 @@ mod tests {
     use crate::frontend::{lexer::*, parser::*};
 
     fn evaluate(code: &str) -> String {
-        let mut ast = Parser::new(Lexer::new(code).tokenize().unwrap())
+        let mut ast = Parser::new(Lexer::new(code, None).tokenize().unwrap())
             .parse()
             .unwrap();
         compile(&mut ast).unwrap();

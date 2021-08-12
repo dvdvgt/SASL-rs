@@ -1,8 +1,8 @@
-//! This module contains the implementation of the compiler called `Abstractor'. 
-//! 
+//! This module contains the implementation of the compiler called `Abstractor'.
+//!
 //! The abstractor replaces all occurences of parameter identifiers of local and
 //! global definitions by applying the rules specified by the SASL language. This is
-//! where the S, K, I, Y and U combinators are introduced into the AST. 
+//! where the S, K, I, Y and U combinators are introduced into the AST.
 
 use crate::ptr;
 use crate::{
@@ -206,7 +206,7 @@ mod tests {
     use crate::frontend::{ast::Ast, lexer::Lexer, parser::Parser, visualize::Visualizer};
 
     fn parse_to_ast(code: &str) -> Ast {
-        Parser::new(Lexer::new(code).tokenize().unwrap())
+        Parser::new(Lexer::new(code, None).tokenize().unwrap())
             .parse()
             .unwrap()
     }

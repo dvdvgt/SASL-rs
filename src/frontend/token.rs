@@ -82,6 +82,8 @@ pub enum Type {
     Geq,
 
     Identifier,
+    Use,
+    Path,
 
     Dot,
     LeftParenthese,
@@ -127,6 +129,8 @@ impl fmt::Display for Type {
                 T![<=] => "<=".to_string(),
                 T![>=] => ">=".to_string(),
                 T![ident] => "Identifier".to_string(),
+                T![use] => "use".to_string(),
+                T![path] => "path".to_string(),
                 T![.] => ".".to_string(),
                 T![,] => ",".to_string(),
                 T![:] => ":".to_string(),
@@ -157,7 +161,8 @@ static KEYWORDS: phf::Map<&'static str, Type> = phf_map! {
     "and" => Type::And,
     "not" => Type::Not,
     "true" => Type::Boolean(true),
-    "false" => Type::Boolean(false)
+    "false" => Type::Boolean(false),
+    "use" => Type::Use
 };
 
 /// Macro for conveniently accessing the different token types without having to write them out.
@@ -218,6 +223,12 @@ macro_rules! T {
     };
     [ident] => {
         $crate::frontend::token::Type::Identifier
+    };
+    [use] => {
+        $crate::frontend::token::Type::Use
+    };
+    [path] => {
+        $crate::frontend::token::Type::Path
     };
     [def] => {
         $crate::frontend::token::Type::Def

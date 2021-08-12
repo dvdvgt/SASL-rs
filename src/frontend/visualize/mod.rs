@@ -10,7 +10,7 @@
 //!
 //! let mut viz = Visualizer::new("test_graph", true);
 //! let ast = Parser::new(
-//!     Lexer::new("a + b where a = 1; b = 2").tokenize().unwrap()
+//!     Lexer::new("a + b where a = 1; b = 2", None).tokenize().unwrap()
 //! ).parse().unwrap();
 //! viz.visualize_ast(&ast);
 //! viz.write_to_pdf("test_graph");
@@ -181,28 +181,5 @@ impl Visualizer {
         self.graph.as_dot(&mut buf).unwrap();
         file.write_all(buf.as_bytes())
             .expect("Error writing to .dot file.");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::frontend::lexer::Lexer;
-    use crate::frontend::parser::Parser;
-
-    fn parse(input: &str) -> AstNodePtr {
-        let mut lx = Lexer::new(input);
-        let tokens = lx.tokenize().unwrap().clone();
-        let mut parser = Parser::new(tokens);
-        parser.parse_expr().unwrap()
-    }
-
-    #[test]
-    fn test_visualizer() {
-        let ast = parse("1 + 2 where a = 1; b = 2; c d e = d + e");
-        let mut vis = Visualizer::new("g", false);
-        vis.visualize_ast_nodes(&ast);
-        vis.write_to_pdf("graph.pdf");
     }
 }

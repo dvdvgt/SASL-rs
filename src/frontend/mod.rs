@@ -6,7 +6,7 @@
 //! ### Example
 //! ```rust
 //! use sasl::frontend::lexer::Lexer;
-//! let mut tokens_or_err = Lexer::new("1 + 2").tokenize();
+//! let mut tokens_or_err = Lexer::new("1 + 2", None).tokenize();
 //! ```
 //! `tokenize` either returns an error or a vector containing all tokens.
 //!
@@ -16,7 +16,7 @@
 //! ### Example
 //! ```rust
 //! use sasl::frontend::{lexer::Lexer, parser::Parser};
-//! let mut tokens_or_err = Lexer::new("1 + 2").tokenize();
+//! let mut tokens_or_err = Lexer::new("1 + 2", None).tokenize();
 //! let mut parser = Parser::new(tokens_or_err.unwrap()).parse();
 //! ```
 //! Again, the parser returns either an error informing the user of a parse error or the parse result
