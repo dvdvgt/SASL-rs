@@ -111,12 +111,16 @@ impl<'a> Parser<'a> {
         ast: &mut Ast,
     ) -> Result<(), Box<dyn std::error::Error>> {
         env::set_current_dir(abs_path)?;
-        //println!("{:?}, {:?}", relative_path, env::current_dir());
         let import_src = load_source_file(relative_path)?;
         let full_path = env::current_dir()?.join(relative_path);
         println!("\u{1b}[93mImported {:?}\u{1b}[0m", &full_path);
-        let tokens =
-            Lexer::new(&import_src, Some(full_path.as_os_str().to_str().unwrap())).tokenize()?;
+        let cwd = env::current_dir()?;
+        let tokens = match full_path.parent() {
+            Some(p) => Lexer::new(&import_src, Some(p.as_os_str().to_str().unwrap())).tokenize()?,
+            None => {
+                Lexer::new(&import_src, Some(cwd.as_os_str().to_str().unwrap().clone())).tokenize()?
+            }
+        };
         let defs = Parser::new(tokens).parse()?.global_defs;
         ast.insert_defs(&defs);
         Ok(())
@@ -131,7 +135,6 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Ast, SaslError> {
         let mut ast = Ast::new();
         let abs_path = Path::new(self.consume(&T![path]).lexeme);
-        //println!("{:?}", abs_path);
         // Check for imports and insert their definitions into the current defs
         while let T![use] = self.peek() {
             self.next();
@@ -140,7 +143,7 @@ impl<'a> Parser<'a> {
             let ret = self.parse_import_file(abs_path, relative_imp_path, &mut ast);
             match ret {
                 Err(e) => eprintln!(
-                    "\u{1b}[31mImport {}: {}\u{1b}[0m",
+                    "\u{1b}[31mImport {}: {}.sasl\u{1b}[0m",
                     relative_imp_path.to_string_lossy(),
                     e
                 ),
