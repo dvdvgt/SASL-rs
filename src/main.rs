@@ -98,8 +98,8 @@ impl<'a> Runner<'a> {
         let mut inpt = String::new();
         println!(
             "SASL-rs 1.0.0\
-        \nA compiler for the SASL functional programming language written in Rust.\
-        \nPress ctrl+d or ctrl+c to exit.\n"
+            \nA compiler for the SASL functional programming language written in Rust.\
+            \nPress ctrl+d or ctrl+c to exit.\n"
         );
         loop {
             print!("\u{1b}[0;38;5;171mλ > \u{1b}[0m");

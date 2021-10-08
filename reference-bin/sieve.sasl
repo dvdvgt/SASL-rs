@@ -1,9 +1,9 @@
 def sieve = go (tl naturalNumbers)
     where
         go xs = (hd xs) : (go (filter (notDivableBy (hd xs)) xs))
-def naturalNumbers = next 0
+def naturalNumbers = next 1
     where 
-        next x = (x + 1) : (next (x + 1))
+        next x = x : (next (x + 1))
 def filter p l = 
     if l = nil 
     then nil
