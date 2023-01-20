@@ -156,7 +156,7 @@ hyperfine --warumup 3 './sasl -c [FILE.sasl]'
     Time (mean ± σ):     477.8 ms ±  17.5 ms    [User: 475.6 ms, System: 2.1 ms]
     Range (min … max):   454.4 ms … 510.5 ms    10 runs
     ```
-3. Computing the ackermann function:
+3. Computing the Ackermann function:
     ```
     def ackermann m n = 
     if m > 0 and n = 0 
